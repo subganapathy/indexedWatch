@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package indexedwatch.schema.v1;
+
+option go_package = "github.com/subramanian/indexedwatch/gen/go/schema/v1;schemav1";
+
+// SchemaService manages resource type schemas.
+// Schemas define the structure of resources including primary key,
+// secondary indexes, and field definitions.
+service SchemaService {
+  // RegisterSchema creates a new schema for a resource type.
+  // The first version becomes the current (active) schema.
+  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+
+  // UpdateSchema adds a new version of an existing schema.
+  // The new version becomes the current schema for new writes.
+  // Must follow schema evolution rules (see docs).
+  rpc UpdateSchema(UpdateSchemaRequest) returns (UpdateSchemaResponse);
+
+  // GetSchema retrieves a specific schema by type and version.
+  // If version is empty, returns the current schema.
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+
+  // ListSchemas returns all schemas, optionally filtered by type.
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
+
+  // ListSchemaVersions returns all versions of a schema type.
+  rpc ListSchemaVersions(ListSchemaVersionsRequest) returns (ListSchemaVersionsResponse);
+}
+
+// RegisterSchemaRequest creates a new schema type.
+message RegisterSchemaRequest {
+  // The schema definition to register.
+  Schema schema = 1;
+}
+
+message RegisterSchemaResponse {
+  // The registered schema with server-assigned metadata.
+  Schema schema = 1;
+}
+
+// UpdateSchemaRequest adds a new version to an existing schema type.
+message UpdateSchemaRequest {
+  // The schema type to update. Must already exist.
+  string type = 1;
+
+  // The new schema definition. Version must be unique for this type.
+  Schema schema = 2;
+}
+
+message UpdateSchemaResponse {
+  // The updated schema with server-assigned metadata.
+  Schema schema = 1;
+}
+
+// GetSchemaRequest retrieves a schema by type and optional version.
+message GetSchemaRequest {
+  // The schema type to retrieve. Required.
+  string type = 1;
+
+  // The version to retrieve. If empty, returns the current version.
+  string version = 2;
+}
+
+message GetSchemaResponse {
+  Schema schema = 1;
+}
+
+// ListSchemasRequest lists schemas with optional filtering.
+message ListSchemasRequest {
+  // If set, only return schemas for this type (all versions).
+  // If empty, returns the current version of each type.
+  string type = 1;
+}
+
+message ListSchemasResponse {
+  repeated Schema schemas = 1;
+}
+
+// ListSchemaVersionsRequest lists all versions of a schema type.
+message ListSchemaVersionsRequest {
+  // The schema type. Required.
+  string type = 1;
+}
+
+message ListSchemaVersionsResponse {
+  // All versions of the schema, ordered by registration time.
+  repeated Schema schemas = 1;
+
+  // The current (active) version.
+  string current_version = 2;
+}
+
+// Schema defines the structure of a resource type.
+message Schema {
+  // Unique identifier for this resource type. Immutable after creation.
+  // Examples: "events", "users", "orders"
+  string type = 1;
+
+  // Version identifier. Must be unique within a type.
+  // Convention: "v1", "v2", etc.
+  string version = 2;
+
+  // The field that serves as the primary key. Required.
+  // Must reference a field defined in `fields`.
+  // Cannot be changed after initial schema registration.
+  string primary_key = 3;
+
+  // Fields to create secondary indexes on.
+  // Each must reference a field defined in `fields`.
+  // Can be added in schema updates (new records only indexed).
+  repeated string secondary_indexes = 4;
+
+  // Field definitions for this schema.
+  map<string, FieldDefinition> fields = 5;
+
+  // Server-assigned metadata (read-only).
+  SchemaMetadata metadata = 6;
+}
+
+// FieldDefinition describes a single field in the schema.
+message FieldDefinition {
+  // The data type of this field.
+  FieldType type = 1;
+
+  // Whether this field is required on create.
+  // If true and missing, write is rejected.
+  bool required = 2;
+
+  // Default value for this field (JSON-encoded).
+  // Used when field is missing on read (for backwards compatibility).
+  // Only applicable if required=false.
+  string default_value = 3;
+
+  // Human-readable description of this field.
+  string description = 4;
+}
+
+// FieldType enumerates the supported field types.
+enum FieldType {
+  FIELD_TYPE_UNSPECIFIED = 0;
+
+  // String value (UTF-8).
+  FIELD_TYPE_STRING = 1;
+
+  // 64-bit signed integer.
+  FIELD_TYPE_INT64 = 2;
+
+  // 64-bit floating point.
+  FIELD_TYPE_DOUBLE = 3;
+
+  // Boolean value.
+  FIELD_TYPE_BOOL = 4;
+
+  // Raw bytes.
+  FIELD_TYPE_BYTES = 5;
+
+  // RFC 3339 timestamp string.
+  FIELD_TYPE_TIMESTAMP = 6;
+
+  // JSON object (nested structure, not indexed).
+  FIELD_TYPE_OBJECT = 7;
+
+  // JSON array (not indexed).
+  FIELD_TYPE_ARRAY = 8;
+}
+
+// SchemaMetadata contains server-assigned metadata.
+message SchemaMetadata {
+  // When this schema version was registered.
+  // RFC 3339 format.
+  string created_at = 1;
+
+  // Whether this is the current (active) version for its type.
+  bool is_current = 2;
+
+  // Sequence number in the schema WAL.
+  // Used internally for ordering.
+  uint64 wal_seq_num = 3;
+}
+
+// SchemaEvolutionError describes why a schema update was rejected.
+message SchemaEvolutionError {
+  // The type of evolution rule that was violated.
+  EvolutionViolation violation = 1;
+
+  // Human-readable description of the error.
+  string message = 2;
+
+  // The field that caused the violation, if applicable.
+  string field = 3;
+}
+
+// EvolutionViolation enumerates schema evolution rule violations.
+enum EvolutionViolation {
+  EVOLUTION_VIOLATION_UNSPECIFIED = 0;
+
+  // Attempted to change the primary key.
+  EVOLUTION_VIOLATION_PRIMARY_KEY_CHANGED = 1;
+
+  // Attempted to change a field's type.
+  EVOLUTION_VIOLATION_FIELD_TYPE_CHANGED = 2;
+
+  // Added a required field without a default value.
+  EVOLUTION_VIOLATION_REQUIRED_FIELD_NO_DEFAULT = 3;
+
+  // Attempted to rename a field (use add + deprecate instead).
+  EVOLUTION_VIOLATION_FIELD_RENAMED = 4;
+}
