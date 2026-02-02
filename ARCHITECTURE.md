@@ -11,6 +11,97 @@ A storage engine providing:
 
 ---
 
+## Shift-Left Philosophy
+
+**Core principle**: Constrain at schema-definition time, simplify at runtime.
+
+Inspired by Confluent's "shift-left for data streaming" - validate data quality at the source, not downstream. IndexedWatch applies this to stateful workloads:
+
+| Concern | Traditional (Runtime) | IndexedWatch (Registration Time) |
+|---------|----------------------|----------------------------------|
+| Schema validation | Client's problem | Rejected at write time |
+| Type isolation | Client must namespace | Guaranteed by design |
+| Cross-type ordering | Client must handle | Not supported (explicit constraint) |
+| Index definition | Client builds own | Declared in schema |
+| Bad data | Propagates downstream | Rejected early |
+
+**Design consequences**:
+- Per-type WAL/SM/LSM isolation (no cross-type interference)
+- Schema required before any writes (contract-first)
+- Failure blast radius limited to single type
+- Simpler runtime: N independent simple systems vs 1 complex global system
+
+---
+
+## Positioning
+
+> **IndexedWatch: Shift-left storage for cloud-native workloads**
+
+| | Kafka | etcd | CockroachDB | **IndexedWatch** |
+|--|-------|------|-------------|------------------|
+| Schema | Registry (optional) | None | SQL DDL | Required (shift-left) |
+| Watch | Consumer groups | Yes | Changefeeds | Yes (K8s-style) |
+| Secondary indexes | No | No | Yes | Yes |
+| Consistency | Partition-ordered | Linearizable | Serializable | Per-type linearizable |
+| Isolation | Topic | Global | Transaction | **Per-type (by design)** |
+| Query | Scan only | KV only | Full SQL | PK + indexed fields |
+
+**Target use cases**:
+- Internal control planes (like K8s, but for your domain)
+- Event-driven microservices (stronger than Kafka, simpler than DB)
+- Real-time config/feature flag systems
+- Multi-tenant SaaS backends (type-per-tenant isolation)
+
+---
+
+## Production Architecture (Future Vision)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Control Plane                                │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐  │
+│  │  Schema API     │  │  Shard Manager  │  │  Cluster Membership │  │
+│  │  - register     │  │  - provision    │  │  - health checks    │  │
+│  │  - evolve       │  │  - scale types  │  │  - routing table    │  │
+│  │  - validate     │  │  - rebalance    │  │  - leader election  │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Proxy Layer                                 │
+│  - Route writes → Leader                                            │
+│  - Route reads → Replicas (or Leader for strong consistency)        │
+│  - Watch stream fanout                                              │
+│  - Connection pooling                                               │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+        ┌─────────────────────────┼─────────────────────────┐
+        ▼                         ▼                         ▼
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│  Type: events   │       │  Type: users    │       │  Type: orders   │
+│                 │       │                 │       │                 │
+│  ┌───────────┐  │       │  ┌───────────┐  │       │  ┌───────────┐  │
+│  │  Leader   │  │       │  │  Leader   │  │       │  │  Leader   │  │
+│  │  (WAL)    │──┼─Raft──┼─▶│ Replica 1 │  │       │  │  (WAL)    │  │
+│  └───────────┘  │       │  │ Replica 2 │  │       │  └───────────┘  │
+│       │         │       │  └───────────┘  │       │       │         │
+│       ▼         │       │                 │       │       ▼         │
+│  SM + LSMs      │       │                 │       │  SM + LSMs      │
+└─────────────────┘       └─────────────────┘       └─────────────────┘
+
+Leader: Handles writes, replicates via Raft
+Replicas: Serve reads, watch streams
+Per-type: Independent scaling, failure isolation
+```
+
+**Scaling model**:
+- Vertical: Larger nodes for hot types
+- Horizontal: More replicas for read-heavy types
+- Sharding: Split large types across multiple leaders (future)
+
+---
+
 ## Storage Layout
 
 ```
