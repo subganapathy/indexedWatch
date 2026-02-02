@@ -236,61 +236,166 @@ func (w *WAL) PruneFiles() {
 
 ---
 
-## State Machine (Snapshot Store)
+## State Machine (MVCC Snapshot Store)
 
 ### Purpose
-The State Machine serves three purposes:
+The State Machine serves four purposes:
 1. **Snapshot serving**: Provides current state for Watch API
-2. **OCC checks**: Record includes `_updateSeqNum` for conflict detection
+2. **OCC checks**: Record includes `UpdateSeqNum` for conflict detection
 3. **Point lookups**: Direct `Get(pk)` for QueryService
+4. **Point-in-time queries**: `GetAt(pk, seqNum)` for consistent SK queries
+
+### Why MVCC?
+
+Without MVCC, SK queries can be inconsistent:
+```
+Timeline:
+  t1: Write(pk=A, user_id=alice) → seqNum=100
+  t2: SM updated immediately
+  t3: SK LSM still processing seqNum 99...
+  t4: Query "user_id=alice" → misses A (SK LSM lag)
+```
+
+With MVCC:
+- SM stores multiple versions per key
+- SK query fetches version at SK LSM's lastAppliedSeqNum
+- Consistent point-in-time view guaranteed
 
 ### Record Format
 ```go
-type Record struct {
+type VersionedRecord struct {
+    SeqNum        uint64                 // WAL seqNum of this version
     SchemaVersion string                 // e.g., "v2"
     CreateSeqNum  uint64                 // immutable, set on first create
-    UpdateSeqNum  uint64                 // updated on every write
     Data          map[string]interface{} // the actual fields
+    IsDeleted     bool                   // tombstone marker
 }
 ```
 
-### Implementation (Phase 1)
+### MVCC Implementation
 ```go
 type StateMachine struct {
-    mu       sync.RWMutex
-    records  map[string]*Record  // pk → Record
-    lastSeqNum uint64            // last applied seqNum
+    mu sync.RWMutex
+
+    // pk → versions (sorted by seqNum descending, newest first)
+    versions map[string][]*VersionedRecord
+
+    // Minimum seqNum we must retain for consumers
+    // = min(all SK LSM lastApplied, oldest active snapshot/watch)
+    minRetainedSeqNum uint64
+
+    // Latest seqNum applied
+    lastSeqNum uint64
 }
 
+// Apply adds a new version for the record
 func (sm *StateMachine) Apply(entry *WALEntry) {
     sm.mu.Lock()
     defer sm.mu.Unlock()
 
-    switch entry.Op {
-    case CREATE:
-        sm.records[entry.PK] = &Record{
-            SchemaVersion: entry.SchemaVersion,
-            CreateSeqNum:  entry.SeqNum,
-            UpdateSeqNum:  entry.SeqNum,
-            Data:          entry.Data,
-        }
-    case UPDATE:
-        rec := sm.records[entry.PK]
-        rec.SchemaVersion = entry.SchemaVersion
-        rec.UpdateSeqNum = entry.SeqNum
-        rec.Data = entry.Data
-    case DELETE:
-        delete(sm.records, entry.PK)
+    var createSeqNum uint64
+    if existing := sm.versions[entry.PK]; len(existing) > 0 {
+        createSeqNum = existing[len(existing)-1].CreateSeqNum
+    } else {
+        createSeqNum = entry.SeqNum
     }
+
+    record := &VersionedRecord{
+        SeqNum:        entry.SeqNum,
+        SchemaVersion: entry.SchemaVersion,
+        CreateSeqNum:  createSeqNum,
+        Data:          entry.Data,
+        IsDeleted:     entry.Op == DELETE,
+    }
+
+    // Prepend (newest first)
+    sm.versions[entry.PK] = append(
+        []*VersionedRecord{record},
+        sm.versions[entry.PK]...,
+    )
     sm.lastSeqNum = entry.SeqNum
+}
+
+// GetAt returns the record version at or before the given seqNum
+func (sm *StateMachine) GetAt(pk string, atSeqNum uint64) *VersionedRecord {
+    sm.mu.RLock()
+    defer sm.mu.RUnlock()
+
+    for _, v := range sm.versions[pk] {
+        if v.SeqNum <= atSeqNum {
+            if v.IsDeleted {
+                return nil
+            }
+            return v
+        }
+    }
+    return nil
+}
+
+// GetLatest returns the most recent version
+func (sm *StateMachine) GetLatest(pk string) *VersionedRecord {
+    sm.mu.RLock()
+    defer sm.mu.RUnlock()
+
+    if versions := sm.versions[pk]; len(versions) > 0 {
+        if versions[0].IsDeleted {
+            return nil
+        }
+        return versions[0]
+    }
+    return nil
 }
 ```
 
+### Garbage Collection
+
+Old versions are retained until all consumers have processed past them:
+
+```go
+func (sm *StateMachine) GC() {
+    sm.mu.Lock()
+    defer sm.mu.Unlock()
+
+    minRetained := sm.computeMinRetainedSeqNum()
+
+    for pk, versions := range sm.versions {
+        // Find cutoff: keep versions >= minRetained, plus one older
+        cutoff := len(versions)
+        for i, v := range versions {
+            if v.SeqNum < minRetained {
+                cutoff = i + 1 // Keep this one as floor, remove older
+                break
+            }
+        }
+        if cutoff < len(versions) {
+            sm.versions[pk] = versions[:cutoff]
+        }
+    }
+}
+
+func (sm *StateMachine) computeMinRetainedSeqNum() uint64 {
+    return min(
+        sm.skLSMTracker.MinLastApplied(),  // SK LSMs need old versions
+        sm.snapshotTracker.MinSeqNum(),    // Active snapshots
+        sm.watchTracker.MinSeqNum(),       // Active watch streams
+    )
+}
+```
+
+### Memory Overhead
+
+MVCC memory is bounded:
+- GC runs based on `min(consumer progress)`
+- Fast consumers = fewer retained versions
+- Typically 1-3 versions per key in steady state
+- Worst case: slow consumer holds back GC (same as WAL retention)
+
 ### Checkpointing
-Periodically write State Machine to disk:
+
+Checkpoint includes all retained versions:
 ```
 /types/events/snapshot/
-  checkpoint_5000.json    # State at seqNum 5000
+  checkpoint_5000.json    # Versions with seqNum >= minRetained at 5000
   CURRENT -> checkpoint_5000.json
 ```
 
@@ -304,9 +409,10 @@ On restart: Load checkpoint + replay WAL from checkpoint's seqNum.
 
 Primary key operations go directly to State Machine:
 ```
-Get(pk):     StateMachine.Get(pk) → record
-Exists(pk):  StateMachine.Get(pk) != nil
-OCC check:   StateMachine.Get(pk).UpdateSeqNum == expectedSeqNum?
+Get(pk):         StateMachine.GetLatest(pk) → record
+GetAt(pk, seq):  StateMachine.GetAt(pk, seq) → record at seqNum
+Exists(pk):      StateMachine.GetLatest(pk) != nil
+OCC check:       StateMachine.GetLatest(pk).SeqNum == expectedSeqNum?
 ```
 
 ### SK LSM (one per indexed field)
@@ -315,26 +421,50 @@ Key:   (sk_field_value, pk) - composite
 Value: seqNum (uint64)
 
 Purpose:
-- List by field: scan prefix → get candidate pks → fetch from State Machine
+- List by field: scan prefix → get candidate pks → fetch versioned record
 - Composite key ensures updates to same record replace old entry
-- seqNum used for compaction (newer wins), not for record fetch
+- seqNum used for:
+  1. Compaction (newer wins)
+  2. MVCC lookup (fetch correct version from State Machine)
 ```
 
-### Query Flow with Re-check
+### SK LSM Tracks Progress
+```go
+type SKLSM struct {
+    // ... LSM internals ...
+
+    // Last seqNum fully applied to this LSM
+    lastAppliedSeqNum uint64
+}
+```
+
+This is critical for:
+- MVCC queries (query at LSM's lastAppliedSeqNum)
+- GC (SM can't delete versions still needed by lagging LSMs)
+- WAL pruning (WAL files retained until all LSMs have processed them)
+
+### Query Flow with MVCC
 ```go
 func (q *QueryService) ListByField(field, value string) ([]*Record, error) {
-    // 1. Scan SK LSM for candidates
+    // 1. Get the seqNum this LSM has processed up to
+    //    This ensures consistent point-in-time view
+    querySeqNum := q.skLSM[field].LastAppliedSeqNum()
+
+    // 2. Scan SK LSM for candidates
     candidates := q.skLSM[field].ScanPrefix(value)
 
-    // 2. Fetch from State Machine and re-check
+    // 3. Fetch versioned records from State Machine
     var results []*Record
     for _, candidate := range candidates {
-        record := q.stateMachine.Get(candidate.PK)
+        // Fetch the version that existed when SK entry was written
+        // This ensures we see the record as it was when indexed
+        record := q.stateMachine.GetAt(candidate.PK, candidate.SeqNum)
         if record == nil {
-            continue // deleted
+            continue // deleted at that point
         }
+        // Re-check: SK value might have changed between writes
         if record.Data[field] != value {
-            continue // SK value changed
+            continue
         }
         results = append(results, record)
     }
@@ -342,7 +472,14 @@ func (q *QueryService) ListByField(field, value string) ([]*Record, error) {
 }
 ```
 
-The SK LSM is a **hint**, not authoritative. Always re-verify against State Machine.
+### Consistency Guarantee
+
+With MVCC + versioned queries:
+- SK query sees consistent snapshot at `skLSM.lastAppliedSeqNum`
+- No missing records due to SM/LSM lag
+- No phantom reads from concurrent writes
+
+The SK LSM is still a **hint** (re-check needed), but MVCC ensures the hint is evaluated against the correct record version.
 
 ---
 
@@ -526,9 +663,9 @@ message Delta {
 - [ ] Schema WAL + materialized registry
 - [ ] Basic data WAL (single file per type, append-only)
 - [ ] WAL index
-- [ ] In-memory State Machine
+- [ ] MVCC State Machine (multi-version with GC)
 - [ ] AdmissionChecker interface + implementations
-- [ ] Point lookup via State Machine
+- [ ] Point lookup via State Machine (GetLatest, GetAt)
 - [ ] OCC via State Machine
 
 ### Phase 2: Secondary Indexing
@@ -564,6 +701,7 @@ message Delta {
 | Schema reference in data | Version name, not seqNum |
 | PK LSM needed? | No, State Machine handles PK ops |
 | Cross-type ordering | Not supported, use timestamps if needed |
+| SM/LSM consistency | MVCC in State Machine - query at LSM's lastAppliedSeqNum |
 
 ## Remaining Open Questions
 
@@ -585,9 +723,10 @@ message Delta {
 | Per-type data WALs | Sound - matches K8s model |
 | WAL pruning (min of consumers) | Sound - standard pattern |
 | AdmissionChecker interface | Sound - clean separation |
-| State Machine for PK ops | Sound - eliminates complexity |
-| SK query with re-check | Sound - index as hint pattern |
+| MVCC State Machine | Sound - enables consistent point-in-time queries |
+| SK query with MVCC | Sound - query at LSM's seqNum for consistency |
+| Version GC | Sound - bounded by slowest consumer |
 
 ---
 
-*Document finalized after architecture discussion*
+*Document updated with MVCC State Machine design*
