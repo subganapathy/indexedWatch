@@ -24,24 +24,41 @@ Following API versioning best practices:
 ### 2. Consistent "SchemaVersion" Naming
 
 All RPCs use consistent "SchemaVersion" terminology:
-- `RegisterSchemaVersion` - creates a new version (creates type if new)
+- `RegisterSchemaVersion` - creates first version of a new type
+- `UpdateSchemaVersion` - adds subsequent versions (with compatibility checks)
+- `ValidateSchemaVersion` - dry-run validation for CI/CD testing
 - `SetCurrentSchemaVersion` - explicitly activates a version
 - `GetSchemaVersion` - retrieves a specific version
 - `ListSchemaTypes` - lists all types (current version of each)
 - `ListSchemaVersions` - lists all versions of a type
 
-This avoids confusion between "Schema" and "Version" concepts.
+### 3. Separate Register vs Update
 
-### 3. Explicit Version Activation (No Auto-Current)
+Clear semantic distinction:
+- `RegisterSchemaVersion` - first version of a NEW type; provisions backend resources
+- `UpdateSchemaVersion` - subsequent versions of EXISTING type; enforces evolution rules
 
-`RegisterSchemaVersion` does NOT automatically set the new version as current.
+This prevents accidental type creation and makes the intent explicit.
+
+### 4. Dry-Run Validation for CI/CD
+
+`ValidateSchemaVersion` enables testing schemas before registering:
+- Validates JSON syntax and field types
+- Checks compatibility with existing versions (if type exists)
+- Returns parsed schema for inspection
+- Indicates whether this would be Register or Update
+- No side effects - safe to call in pipelines
+
+### 5. Explicit Version Activation (No Auto-Current)
+
+Neither `RegisterSchemaVersion` nor `UpdateSchemaVersion` auto-set current version.
 This enables safe production workflows:
-- Register a new version
-- Test/validate in staging
+- Register/Update a new version
+- Test with `ValidateSchemaVersion` or integration tests
 - Explicitly activate via `SetCurrentSchemaVersion`
 - Rollback by setting current to a previous version
 
-### 4. Schema as JSON String (GitOps-friendly)
+### 6. Schema as JSON String (GitOps-friendly)
 
 Clients submit schemas as JSON strings rather than proto messages:
 ```json
@@ -64,7 +81,7 @@ Benefits:
 - No proto compilation required for schema authors
 - Type and version are in the JSON - no redundant request fields
 
-### 5. Nested Field Indexing (Dot Notation)
+### 7. Nested Field Indexing (Dot Notation)
 
 Secondary indexes support nested fields using dot notation:
 - `"user_id"` - top-level field
@@ -73,14 +90,21 @@ Secondary indexes support nested fields using dot notation:
 
 This enables flexible querying on JSON document structures.
 
-### 6. Backend Resource Provisioning
+### 8. Backend Resource Provisioning
 
-`RegisterSchemaVersion` comment documents that backend resources are created on first version:
+`RegisterSchemaVersion` provisions backend resources on first version:
 - WAL for the new type
 - State Machine for snapshot/PK lookups
 - LSMs for each secondary index
 
-### 7. Pagination Support
+### 9. Structured Validation Errors
+
+`ValidateSchemaVersionResponse` returns detailed error information:
+- `ValidationError` with type, message, field, and JSON path
+- `ValidationErrorType` enum for programmatic handling
+- `compatibility_notes` for evolution check results
+
+### 10. Pagination Support
 
 List APIs include pagination for scalability:
 - `page_size` - max results per page (default 100, max 1000)
@@ -88,34 +112,31 @@ List APIs include pagination for scalability:
 - `next_page_token` - returned in response
 - `total_count` - total matching items across all pages
 
-### 8. Field Mask Support
+### 11. Field Mask Support
 
-`GetSchemaVersionRequest` includes optional `google.protobuf.FieldMask` for partial responses:
-- Reduces payload size for clients that only need specific fields
-- Standard proto pattern for selective retrieval
+`GetSchemaVersionRequest` includes optional `google.protobuf.FieldMask` for partial responses.
 
-### 9. Field Types
-
-Supported types chosen for:
-- **Indexability**: STRING, INT64, DOUBLE, BOOL, TIMESTAMP can be secondary index keys
-- **Flexibility**: OBJECT (with nested indexing via dot notation), ARRAY for complex data
-- **Timestamps**: RFC 3339 string format for human readability
-
-### 10. Evolution Rules Encoded in Proto
+### 12. Evolution Rules Encoded in Proto
 
 `SchemaEvolutionError` and `EvolutionViolation` make evolution rules explicit:
-- Clients get structured errors, not just strings
-- Documentation is in the API contract
+- Primary key cannot change
+- Field types cannot change
+- New required fields must have defaults
 
 ## API Overview
 
 ```protobuf
 service SchemaService {
-  // Creates a schema version. Creates type if new.
-  // Does NOT auto-set as current.
+  // First version of a new type. Provisions backend resources.
   rpc RegisterSchemaVersion(RegisterSchemaVersionRequest) returns (RegisterSchemaVersionResponse);
 
-  // Explicitly sets the current version. Enables rollback.
+  // Subsequent versions. Enforces evolution rules.
+  rpc UpdateSchemaVersion(UpdateSchemaVersionRequest) returns (UpdateSchemaVersionResponse);
+
+  // Dry-run validation. No side effects.
+  rpc ValidateSchemaVersion(ValidateSchemaVersionRequest) returns (ValidateSchemaVersionResponse);
+
+  // Explicitly sets current version. Enables rollback.
   rpc SetCurrentSchemaVersion(SetCurrentSchemaVersionRequest) returns (SetCurrentSchemaVersionResponse);
 
   // Retrieves a version (defaults to current if version omitted).
@@ -127,6 +148,27 @@ service SchemaService {
   // Lists all versions of a type.
   rpc ListSchemaVersions(ListSchemaVersionsRequest) returns (ListSchemaVersionsResponse);
 }
+```
+
+## Typical Workflows
+
+### New Type Registration
+```
+1. ValidateSchemaVersion(schema_json)  # Test first
+2. RegisterSchemaVersion(schema_json)   # Create type + v1
+3. SetCurrentSchemaVersion(type, "v1")  # Activate
+```
+
+### Backwards-Compatible Update
+```
+1. ValidateSchemaVersion(schema_json)    # Test compatibility
+2. UpdateSchemaVersion(schema_json)      # Add v2
+3. SetCurrentSchemaVersion(type, "v2")   # Activate v2
+```
+
+### Rollback
+```
+1. SetCurrentSchemaVersion(type, "v1")   # Back to v1
 ```
 
 ## Reference Code
@@ -143,8 +185,8 @@ N/A for proto definitions. Implementation PRs will address:
 ## Learning Points
 
 1. **Proto3 best practices**:
-   - Let buf managed mode handle `go_package` (removed explicit option)
-   - Prefix enums with type name (`FIELD_TYPE_STRING`)
+   - Let buf managed mode handle `go_package`
+   - Prefix enums with type name (`FIELD_TYPE_STRING`, `VALIDATION_ERROR_TYPE_*`)
    - Use `google.protobuf.FieldMask` for partial responses
 
 2. **Buf tooling**:
@@ -154,15 +196,15 @@ N/A for proto definitions. Implementation PRs will address:
 
 3. **gRPC API design**:
    - Consistent naming (SchemaVersion throughout)
+   - Separate Register vs Update for clear semantics
+   - Dry-run validation endpoint for CI/CD
    - Explicit state transitions (SetCurrentSchemaVersion)
-   - Use request/response wrappers for extensibility
-   - Include metadata for server-assigned fields
-   - Always include pagination for list APIs
+   - Structured error responses for programmatic handling
 
 4. **GitOps-friendly API**:
    - Accept JSON strings for human-authored content
    - Return structured proto messages for programmatic access
-   - Parse type/version from JSON to avoid redundancy
+   - Validation endpoint for pipeline integration
 
 ## Testing
 
@@ -182,16 +224,17 @@ go build ./...
 | Feedback | Resolution |
 |----------|------------|
 | go_package mismatch with managed mode | Removed explicit option, let buf handle it |
-| Support nested fields for secondary index | Added dot notation support, documented in comments |
+| Support nested fields for secondary index | Added dot notation support |
 | Mention WAL/LSMs in RegisterSchema comment | Updated comment to mention backend resources |
 | Use proto FieldMask | Added field_mask to GetSchemaVersionRequest |
 | Add pagination to ListSchemas | Added pagination to ListSchemaTypes |
 | Add pagination to ListSchemaVersions | Added pagination fields |
 | Schema as JSON instead of proto | Changed to schema_json string input |
 | Naming inconsistency (Schema vs Version) | Renamed all RPCs to use "SchemaVersion" consistently |
-| Type redundant in UpdateSchema | Removed UpdateSchema; type is in JSON |
 | Auto-current version is wrong | Added SetCurrentSchemaVersion for explicit activation |
-| ListSchemas unclear semantics | Renamed to ListSchemaTypes (lists types, not versions) |
+| ListSchemas unclear semantics | Renamed to ListSchemaTypes |
+| UpdateSchemaVersion needed | Added for backwards-compatible updates with evolution checks |
+| Validation/testing endpoint needed | Added ValidateSchemaVersion for dry-run testing |
 
 ## Files Changed
 

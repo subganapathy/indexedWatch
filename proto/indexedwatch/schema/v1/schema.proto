@@ -9,16 +9,34 @@ import "google/protobuf/field_mask.proto";
 // secondary indexes, and field definitions.
 //
 // Workflow:
-// 1. RegisterSchemaVersion to create a new version (creates type if new)
-// 2. SetCurrentSchemaVersion to activate a version for writes
-// 3. Rollback by SetCurrentSchemaVersion to a previous version
+// 1. RegisterSchemaVersion to create the first version of a new type
+// 2. UpdateSchemaVersion to add subsequent versions (with compatibility checks)
+// 3. ValidateSchemaVersion to test a schema before registering (dry-run)
+// 4. SetCurrentSchemaVersion to activate a version for writes
+// 5. Rollback by SetCurrentSchemaVersion to a previous version
 service SchemaService {
-  // RegisterSchemaVersion creates a new schema version.
-  // If the type doesn't exist, it is created.
+  // RegisterSchemaVersion creates the first version of a new schema type.
+  // Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
   // Does NOT automatically set as current - use SetCurrentSchemaVersion.
-  // This also provisions backend resources on first version:
-  // WAL, State Machine, and LSMs for each secondary index.
+  // Provisions backend resources: WAL, State Machine, and LSMs for each secondary index.
   rpc RegisterSchemaVersion(RegisterSchemaVersionRequest) returns (RegisterSchemaVersionResponse);
+
+  // UpdateSchemaVersion adds a new version to an existing schema type.
+  // Fails if the type doesn't exist - use RegisterSchemaVersion for the first version.
+  // Enforces schema evolution rules:
+  // - Primary key cannot change
+  // - Field types cannot change
+  // - New required fields must have defaults
+  // Does NOT automatically set as current - use SetCurrentSchemaVersion.
+  rpc UpdateSchemaVersion(UpdateSchemaVersionRequest) returns (UpdateSchemaVersionResponse);
+
+  // ValidateSchemaVersion validates a schema without persisting it (dry-run).
+  // Use this in CI/CD pipelines to test schemas before registering.
+  // Checks:
+  // - JSON syntax and field type validity
+  // - If type exists: schema evolution compatibility with all existing versions
+  // - If type doesn't exist: standalone validation only
+  rpc ValidateSchemaVersion(ValidateSchemaVersionRequest) returns (ValidateSchemaVersionResponse);
 
   // SetCurrentSchemaVersion sets which version is the current (active) version.
   // All new writes are validated against the current version.
@@ -37,10 +55,11 @@ service SchemaService {
   rpc ListSchemaVersions(ListSchemaVersionsRequest) returns (ListSchemaVersionsResponse);
 }
 
-// RegisterSchemaVersionRequest creates a new schema version.
+// RegisterSchemaVersionRequest creates the first version of a new schema type.
 message RegisterSchemaVersionRequest {
   // The schema definition as a JSON string.
   // Using JSON allows schemas to be version-controlled and deployed via CI/CD.
+  // Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
   //
   // Example:
   // {
@@ -63,6 +82,98 @@ message RegisterSchemaVersionRequest {
 message RegisterSchemaVersionResponse {
   // The registered schema version with server-assigned metadata.
   SchemaVersion schema_version = 1;
+}
+
+// UpdateSchemaVersionRequest adds a new version to an existing type.
+message UpdateSchemaVersionRequest {
+  // The schema definition as a JSON string.
+  // Type must already exist (use RegisterSchemaVersion for new types).
+  // Version must be unique for this type.
+  // Must pass schema evolution compatibility checks.
+  // See RegisterSchemaVersionRequest for JSON format documentation.
+  string schema_json = 1;
+}
+
+message UpdateSchemaVersionResponse {
+  // The new schema version with server-assigned metadata.
+  SchemaVersion schema_version = 1;
+
+  // Compatibility check results (informational).
+  // Lists what changed from the previous version.
+  repeated string compatibility_notes = 2;
+}
+
+// ValidateSchemaVersionRequest validates a schema without persisting (dry-run).
+message ValidateSchemaVersionRequest {
+  // The schema definition as a JSON string to validate.
+  // See RegisterSchemaVersionRequest for JSON format documentation.
+  string schema_json = 1;
+}
+
+message ValidateSchemaVersionResponse {
+  // Whether the schema is valid.
+  bool valid = 1;
+
+  // The parsed schema (if valid). Allows inspection of server interpretation.
+  SchemaVersion schema_version = 2;
+
+  // Validation errors (if invalid).
+  repeated ValidationError errors = 3;
+
+  // Compatibility check results (if type exists).
+  // Empty if type doesn't exist (new type scenario).
+  repeated string compatibility_notes = 4;
+
+  // Whether this would be a new type (RegisterSchemaVersion)
+  // or an update to existing type (UpdateSchemaVersion).
+  bool is_new_type = 5;
+}
+
+// ValidationError describes a schema validation failure.
+message ValidationError {
+  // The type of validation error.
+  ValidationErrorType error_type = 1;
+
+  // Human-readable description of the error.
+  string message = 2;
+
+  // The field that caused the error, if applicable.
+  string field = 3;
+
+  // The path within the JSON where the error occurred.
+  string json_path = 4;
+}
+
+// ValidationErrorType enumerates schema validation error types.
+enum ValidationErrorType {
+  VALIDATION_ERROR_TYPE_UNSPECIFIED = 0;
+
+  // Invalid JSON syntax.
+  VALIDATION_ERROR_TYPE_INVALID_JSON = 1;
+
+  // Missing required field in schema (type, version, primaryKey, fields).
+  VALIDATION_ERROR_TYPE_MISSING_REQUIRED = 2;
+
+  // Invalid field type specified.
+  VALIDATION_ERROR_TYPE_INVALID_FIELD_TYPE = 3;
+
+  // Primary key references non-existent field.
+  VALIDATION_ERROR_TYPE_INVALID_PRIMARY_KEY = 4;
+
+  // Secondary index references non-existent field or invalid nested path.
+  VALIDATION_ERROR_TYPE_INVALID_SECONDARY_INDEX = 5;
+
+  // Schema evolution rule violation (see SchemaEvolutionError for details).
+  VALIDATION_ERROR_TYPE_EVOLUTION_VIOLATION = 6;
+
+  // Type already exists (for RegisterSchemaVersion).
+  VALIDATION_ERROR_TYPE_TYPE_EXISTS = 7;
+
+  // Type doesn't exist (for UpdateSchemaVersion).
+  VALIDATION_ERROR_TYPE_TYPE_NOT_FOUND = 8;
+
+  // Version already exists for this type.
+  VALIDATION_ERROR_TYPE_VERSION_EXISTS = 9;
 }
 
 // SetCurrentSchemaVersionRequest sets the active version for a type.

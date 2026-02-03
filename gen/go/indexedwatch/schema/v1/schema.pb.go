@@ -22,6 +22,86 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ValidationErrorType enumerates schema validation error types.
+type ValidationErrorType int32
+
+const (
+	ValidationErrorType_VALIDATION_ERROR_TYPE_UNSPECIFIED ValidationErrorType = 0
+	// Invalid JSON syntax.
+	ValidationErrorType_VALIDATION_ERROR_TYPE_INVALID_JSON ValidationErrorType = 1
+	// Missing required field in schema (type, version, primaryKey, fields).
+	ValidationErrorType_VALIDATION_ERROR_TYPE_MISSING_REQUIRED ValidationErrorType = 2
+	// Invalid field type specified.
+	ValidationErrorType_VALIDATION_ERROR_TYPE_INVALID_FIELD_TYPE ValidationErrorType = 3
+	// Primary key references non-existent field.
+	ValidationErrorType_VALIDATION_ERROR_TYPE_INVALID_PRIMARY_KEY ValidationErrorType = 4
+	// Secondary index references non-existent field or invalid nested path.
+	ValidationErrorType_VALIDATION_ERROR_TYPE_INVALID_SECONDARY_INDEX ValidationErrorType = 5
+	// Schema evolution rule violation (see SchemaEvolutionError for details).
+	ValidationErrorType_VALIDATION_ERROR_TYPE_EVOLUTION_VIOLATION ValidationErrorType = 6
+	// Type already exists (for RegisterSchemaVersion).
+	ValidationErrorType_VALIDATION_ERROR_TYPE_TYPE_EXISTS ValidationErrorType = 7
+	// Type doesn't exist (for UpdateSchemaVersion).
+	ValidationErrorType_VALIDATION_ERROR_TYPE_TYPE_NOT_FOUND ValidationErrorType = 8
+	// Version already exists for this type.
+	ValidationErrorType_VALIDATION_ERROR_TYPE_VERSION_EXISTS ValidationErrorType = 9
+)
+
+// Enum value maps for ValidationErrorType.
+var (
+	ValidationErrorType_name = map[int32]string{
+		0: "VALIDATION_ERROR_TYPE_UNSPECIFIED",
+		1: "VALIDATION_ERROR_TYPE_INVALID_JSON",
+		2: "VALIDATION_ERROR_TYPE_MISSING_REQUIRED",
+		3: "VALIDATION_ERROR_TYPE_INVALID_FIELD_TYPE",
+		4: "VALIDATION_ERROR_TYPE_INVALID_PRIMARY_KEY",
+		5: "VALIDATION_ERROR_TYPE_INVALID_SECONDARY_INDEX",
+		6: "VALIDATION_ERROR_TYPE_EVOLUTION_VIOLATION",
+		7: "VALIDATION_ERROR_TYPE_TYPE_EXISTS",
+		8: "VALIDATION_ERROR_TYPE_TYPE_NOT_FOUND",
+		9: "VALIDATION_ERROR_TYPE_VERSION_EXISTS",
+	}
+	ValidationErrorType_value = map[string]int32{
+		"VALIDATION_ERROR_TYPE_UNSPECIFIED":             0,
+		"VALIDATION_ERROR_TYPE_INVALID_JSON":            1,
+		"VALIDATION_ERROR_TYPE_MISSING_REQUIRED":        2,
+		"VALIDATION_ERROR_TYPE_INVALID_FIELD_TYPE":      3,
+		"VALIDATION_ERROR_TYPE_INVALID_PRIMARY_KEY":     4,
+		"VALIDATION_ERROR_TYPE_INVALID_SECONDARY_INDEX": 5,
+		"VALIDATION_ERROR_TYPE_EVOLUTION_VIOLATION":     6,
+		"VALIDATION_ERROR_TYPE_TYPE_EXISTS":             7,
+		"VALIDATION_ERROR_TYPE_TYPE_NOT_FOUND":          8,
+		"VALIDATION_ERROR_TYPE_VERSION_EXISTS":          9,
+	}
+)
+
+func (x ValidationErrorType) Enum() *ValidationErrorType {
+	p := new(ValidationErrorType)
+	*p = x
+	return p
+}
+
+func (x ValidationErrorType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ValidationErrorType) Descriptor() protoreflect.EnumDescriptor {
+	return file_indexedwatch_schema_v1_schema_proto_enumTypes[0].Descriptor()
+}
+
+func (ValidationErrorType) Type() protoreflect.EnumType {
+	return &file_indexedwatch_schema_v1_schema_proto_enumTypes[0]
+}
+
+func (x ValidationErrorType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ValidationErrorType.Descriptor instead.
+func (ValidationErrorType) EnumDescriptor() ([]byte, []int) {
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{0}
+}
+
 // FieldType enumerates the supported field types.
 type FieldType int32
 
@@ -83,11 +163,11 @@ func (x FieldType) String() string {
 }
 
 func (FieldType) Descriptor() protoreflect.EnumDescriptor {
-	return file_indexedwatch_schema_v1_schema_proto_enumTypes[0].Descriptor()
+	return file_indexedwatch_schema_v1_schema_proto_enumTypes[1].Descriptor()
 }
 
 func (FieldType) Type() protoreflect.EnumType {
-	return &file_indexedwatch_schema_v1_schema_proto_enumTypes[0]
+	return &file_indexedwatch_schema_v1_schema_proto_enumTypes[1]
 }
 
 func (x FieldType) Number() protoreflect.EnumNumber {
@@ -96,7 +176,7 @@ func (x FieldType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use FieldType.Descriptor instead.
 func (FieldType) EnumDescriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{0}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{1}
 }
 
 // EvolutionViolation enumerates schema evolution rule violations.
@@ -143,11 +223,11 @@ func (x EvolutionViolation) String() string {
 }
 
 func (EvolutionViolation) Descriptor() protoreflect.EnumDescriptor {
-	return file_indexedwatch_schema_v1_schema_proto_enumTypes[1].Descriptor()
+	return file_indexedwatch_schema_v1_schema_proto_enumTypes[2].Descriptor()
 }
 
 func (EvolutionViolation) Type() protoreflect.EnumType {
-	return &file_indexedwatch_schema_v1_schema_proto_enumTypes[1]
+	return &file_indexedwatch_schema_v1_schema_proto_enumTypes[2]
 }
 
 func (x EvolutionViolation) Number() protoreflect.EnumNumber {
@@ -156,14 +236,15 @@ func (x EvolutionViolation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EvolutionViolation.Descriptor instead.
 func (EvolutionViolation) EnumDescriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{1}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{2}
 }
 
-// RegisterSchemaVersionRequest creates a new schema version.
+// RegisterSchemaVersionRequest creates the first version of a new schema type.
 type RegisterSchemaVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The schema definition as a JSON string.
 	// Using JSON allows schemas to be version-controlled and deployed via CI/CD.
+	// Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
 	//
 	// Example:
 	//
@@ -268,6 +349,314 @@ func (x *RegisterSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
 	return nil
 }
 
+// UpdateSchemaVersionRequest adds a new version to an existing type.
+type UpdateSchemaVersionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The schema definition as a JSON string.
+	// Type must already exist (use RegisterSchemaVersion for new types).
+	// Version must be unique for this type.
+	// Must pass schema evolution compatibility checks.
+	// See RegisterSchemaVersionRequest for JSON format documentation.
+	SchemaJson    string `protobuf:"bytes,1,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSchemaVersionRequest) Reset() {
+	*x = UpdateSchemaVersionRequest{}
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSchemaVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSchemaVersionRequest) ProtoMessage() {}
+
+func (x *UpdateSchemaVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSchemaVersionRequest.ProtoReflect.Descriptor instead.
+func (*UpdateSchemaVersionRequest) Descriptor() ([]byte, []int) {
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *UpdateSchemaVersionRequest) GetSchemaJson() string {
+	if x != nil {
+		return x.SchemaJson
+	}
+	return ""
+}
+
+type UpdateSchemaVersionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The new schema version with server-assigned metadata.
+	SchemaVersion *SchemaVersion `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// Compatibility check results (informational).
+	// Lists what changed from the previous version.
+	CompatibilityNotes []string `protobuf:"bytes,2,rep,name=compatibility_notes,json=compatibilityNotes,proto3" json:"compatibility_notes,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *UpdateSchemaVersionResponse) Reset() {
+	*x = UpdateSchemaVersionResponse{}
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSchemaVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSchemaVersionResponse) ProtoMessage() {}
+
+func (x *UpdateSchemaVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSchemaVersionResponse.ProtoReflect.Descriptor instead.
+func (*UpdateSchemaVersionResponse) Descriptor() ([]byte, []int) {
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UpdateSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return nil
+}
+
+func (x *UpdateSchemaVersionResponse) GetCompatibilityNotes() []string {
+	if x != nil {
+		return x.CompatibilityNotes
+	}
+	return nil
+}
+
+// ValidateSchemaVersionRequest validates a schema without persisting (dry-run).
+type ValidateSchemaVersionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The schema definition as a JSON string to validate.
+	// See RegisterSchemaVersionRequest for JSON format documentation.
+	SchemaJson    string `protobuf:"bytes,1,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateSchemaVersionRequest) Reset() {
+	*x = ValidateSchemaVersionRequest{}
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateSchemaVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateSchemaVersionRequest) ProtoMessage() {}
+
+func (x *ValidateSchemaVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateSchemaVersionRequest.ProtoReflect.Descriptor instead.
+func (*ValidateSchemaVersionRequest) Descriptor() ([]byte, []int) {
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ValidateSchemaVersionRequest) GetSchemaJson() string {
+	if x != nil {
+		return x.SchemaJson
+	}
+	return ""
+}
+
+type ValidateSchemaVersionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the schema is valid.
+	Valid bool `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	// The parsed schema (if valid). Allows inspection of server interpretation.
+	SchemaVersion *SchemaVersion `protobuf:"bytes,2,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// Validation errors (if invalid).
+	Errors []*ValidationError `protobuf:"bytes,3,rep,name=errors,proto3" json:"errors,omitempty"`
+	// Compatibility check results (if type exists).
+	// Empty if type doesn't exist (new type scenario).
+	CompatibilityNotes []string `protobuf:"bytes,4,rep,name=compatibility_notes,json=compatibilityNotes,proto3" json:"compatibility_notes,omitempty"`
+	// Whether this would be a new type (RegisterSchemaVersion)
+	// or an update to existing type (UpdateSchemaVersion).
+	IsNewType     bool `protobuf:"varint,5,opt,name=is_new_type,json=isNewType,proto3" json:"is_new_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateSchemaVersionResponse) Reset() {
+	*x = ValidateSchemaVersionResponse{}
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateSchemaVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateSchemaVersionResponse) ProtoMessage() {}
+
+func (x *ValidateSchemaVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateSchemaVersionResponse.ProtoReflect.Descriptor instead.
+func (*ValidateSchemaVersionResponse) Descriptor() ([]byte, []int) {
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ValidateSchemaVersionResponse) GetValid() bool {
+	if x != nil {
+		return x.Valid
+	}
+	return false
+}
+
+func (x *ValidateSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return nil
+}
+
+func (x *ValidateSchemaVersionResponse) GetErrors() []*ValidationError {
+	if x != nil {
+		return x.Errors
+	}
+	return nil
+}
+
+func (x *ValidateSchemaVersionResponse) GetCompatibilityNotes() []string {
+	if x != nil {
+		return x.CompatibilityNotes
+	}
+	return nil
+}
+
+func (x *ValidateSchemaVersionResponse) GetIsNewType() bool {
+	if x != nil {
+		return x.IsNewType
+	}
+	return false
+}
+
+// ValidationError describes a schema validation failure.
+type ValidationError struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The type of validation error.
+	ErrorType ValidationErrorType `protobuf:"varint,1,opt,name=error_type,json=errorType,proto3,enum=indexedwatch.schema.v1.ValidationErrorType" json:"error_type,omitempty"`
+	// Human-readable description of the error.
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// The field that caused the error, if applicable.
+	Field string `protobuf:"bytes,3,opt,name=field,proto3" json:"field,omitempty"`
+	// The path within the JSON where the error occurred.
+	JsonPath      string `protobuf:"bytes,4,opt,name=json_path,json=jsonPath,proto3" json:"json_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidationError) Reset() {
+	*x = ValidationError{}
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidationError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidationError) ProtoMessage() {}
+
+func (x *ValidationError) ProtoReflect() protoreflect.Message {
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidationError.ProtoReflect.Descriptor instead.
+func (*ValidationError) Descriptor() ([]byte, []int) {
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ValidationError) GetErrorType() ValidationErrorType {
+	if x != nil {
+		return x.ErrorType
+	}
+	return ValidationErrorType_VALIDATION_ERROR_TYPE_UNSPECIFIED
+}
+
+func (x *ValidationError) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ValidationError) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *ValidationError) GetJsonPath() string {
+	if x != nil {
+		return x.JsonPath
+	}
+	return ""
+}
+
 // SetCurrentSchemaVersionRequest sets the active version for a type.
 type SetCurrentSchemaVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -282,7 +671,7 @@ type SetCurrentSchemaVersionRequest struct {
 
 func (x *SetCurrentSchemaVersionRequest) Reset() {
 	*x = SetCurrentSchemaVersionRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -294,7 +683,7 @@ func (x *SetCurrentSchemaVersionRequest) String() string {
 func (*SetCurrentSchemaVersionRequest) ProtoMessage() {}
 
 func (x *SetCurrentSchemaVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -307,7 +696,7 @@ func (x *SetCurrentSchemaVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentSchemaVersionRequest.ProtoReflect.Descriptor instead.
 func (*SetCurrentSchemaVersionRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{2}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SetCurrentSchemaVersionRequest) GetType() string {
@@ -336,7 +725,7 @@ type SetCurrentSchemaVersionResponse struct {
 
 func (x *SetCurrentSchemaVersionResponse) Reset() {
 	*x = SetCurrentSchemaVersionResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -348,7 +737,7 @@ func (x *SetCurrentSchemaVersionResponse) String() string {
 func (*SetCurrentSchemaVersionResponse) ProtoMessage() {}
 
 func (x *SetCurrentSchemaVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -361,7 +750,7 @@ func (x *SetCurrentSchemaVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCurrentSchemaVersionResponse.ProtoReflect.Descriptor instead.
 func (*SetCurrentSchemaVersionResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{3}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SetCurrentSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
@@ -394,7 +783,7 @@ type GetSchemaVersionRequest struct {
 
 func (x *GetSchemaVersionRequest) Reset() {
 	*x = GetSchemaVersionRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -406,7 +795,7 @@ func (x *GetSchemaVersionRequest) String() string {
 func (*GetSchemaVersionRequest) ProtoMessage() {}
 
 func (x *GetSchemaVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -419,7 +808,7 @@ func (x *GetSchemaVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetSchemaVersionRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{4}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetSchemaVersionRequest) GetType() string {
@@ -452,7 +841,7 @@ type GetSchemaVersionResponse struct {
 
 func (x *GetSchemaVersionResponse) Reset() {
 	*x = GetSchemaVersionResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -464,7 +853,7 @@ func (x *GetSchemaVersionResponse) String() string {
 func (*GetSchemaVersionResponse) ProtoMessage() {}
 
 func (x *GetSchemaVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -477,7 +866,7 @@ func (x *GetSchemaVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetSchemaVersionResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{5}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
@@ -501,7 +890,7 @@ type ListSchemaTypesRequest struct {
 
 func (x *ListSchemaTypesRequest) Reset() {
 	*x = ListSchemaTypesRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -513,7 +902,7 @@ func (x *ListSchemaTypesRequest) String() string {
 func (*ListSchemaTypesRequest) ProtoMessage() {}
 
 func (x *ListSchemaTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -526,7 +915,7 @@ func (x *ListSchemaTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemaTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListSchemaTypesRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{6}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListSchemaTypesRequest) GetPageSize() int32 {
@@ -557,7 +946,7 @@ type ListSchemaTypesResponse struct {
 
 func (x *ListSchemaTypesResponse) Reset() {
 	*x = ListSchemaTypesResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -569,7 +958,7 @@ func (x *ListSchemaTypesResponse) String() string {
 func (*ListSchemaTypesResponse) ProtoMessage() {}
 
 func (x *ListSchemaTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -582,7 +971,7 @@ func (x *ListSchemaTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemaTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListSchemaTypesResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{7}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListSchemaTypesResponse) GetSchemaVersions() []*SchemaVersion {
@@ -621,7 +1010,7 @@ type ListSchemaVersionsRequest struct {
 
 func (x *ListSchemaVersionsRequest) Reset() {
 	*x = ListSchemaVersionsRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -633,7 +1022,7 @@ func (x *ListSchemaVersionsRequest) String() string {
 func (*ListSchemaVersionsRequest) ProtoMessage() {}
 
 func (x *ListSchemaVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -646,7 +1035,7 @@ func (x *ListSchemaVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemaVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSchemaVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{8}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListSchemaVersionsRequest) GetType() string {
@@ -686,7 +1075,7 @@ type ListSchemaVersionsResponse struct {
 
 func (x *ListSchemaVersionsResponse) Reset() {
 	*x = ListSchemaVersionsResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -698,7 +1087,7 @@ func (x *ListSchemaVersionsResponse) String() string {
 func (*ListSchemaVersionsResponse) ProtoMessage() {}
 
 func (x *ListSchemaVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -711,7 +1100,7 @@ func (x *ListSchemaVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemaVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSchemaVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{9}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListSchemaVersionsResponse) GetSchemaVersions() []*SchemaVersion {
@@ -771,7 +1160,7 @@ type SchemaVersion struct {
 
 func (x *SchemaVersion) Reset() {
 	*x = SchemaVersion{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -783,7 +1172,7 @@ func (x *SchemaVersion) String() string {
 func (*SchemaVersion) ProtoMessage() {}
 
 func (x *SchemaVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -796,7 +1185,7 @@ func (x *SchemaVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaVersion.ProtoReflect.Descriptor instead.
 func (*SchemaVersion) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{10}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SchemaVersion) GetType() string {
@@ -861,7 +1250,7 @@ type FieldDefinition struct {
 
 func (x *FieldDefinition) Reset() {
 	*x = FieldDefinition{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[11]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -873,7 +1262,7 @@ func (x *FieldDefinition) String() string {
 func (*FieldDefinition) ProtoMessage() {}
 
 func (x *FieldDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[11]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -886,7 +1275,7 @@ func (x *FieldDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FieldDefinition.ProtoReflect.Descriptor instead.
 func (*FieldDefinition) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{11}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *FieldDefinition) GetType() FieldType {
@@ -934,7 +1323,7 @@ type SchemaVersionMetadata struct {
 
 func (x *SchemaVersionMetadata) Reset() {
 	*x = SchemaVersionMetadata{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[12]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -946,7 +1335,7 @@ func (x *SchemaVersionMetadata) String() string {
 func (*SchemaVersionMetadata) ProtoMessage() {}
 
 func (x *SchemaVersionMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[12]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -959,7 +1348,7 @@ func (x *SchemaVersionMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaVersionMetadata.ProtoReflect.Descriptor instead.
 func (*SchemaVersionMetadata) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{12}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SchemaVersionMetadata) GetCreatedAt() string {
@@ -998,7 +1387,7 @@ type SchemaEvolutionError struct {
 
 func (x *SchemaEvolutionError) Reset() {
 	*x = SchemaEvolutionError{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[13]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1010,7 +1399,7 @@ func (x *SchemaEvolutionError) String() string {
 func (*SchemaEvolutionError) ProtoMessage() {}
 
 func (x *SchemaEvolutionError) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[13]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1023,7 +1412,7 @@ func (x *SchemaEvolutionError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaEvolutionError.ProtoReflect.Descriptor instead.
 func (*SchemaEvolutionError) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{13}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SchemaEvolutionError) GetViolation() EvolutionViolation {
@@ -1056,7 +1445,28 @@ const file_indexedwatch_schema_v1_schema_proto_rawDesc = "" +
 	"\vschema_json\x18\x01 \x01(\tR\n" +
 	"schemaJson\"m\n" +
 	"\x1dRegisterSchemaVersionResponse\x12L\n" +
-	"\x0eschema_version\x18\x01 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\"N\n" +
+	"\x0eschema_version\x18\x01 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\"=\n" +
+	"\x1aUpdateSchemaVersionRequest\x12\x1f\n" +
+	"\vschema_json\x18\x01 \x01(\tR\n" +
+	"schemaJson\"\x9c\x01\n" +
+	"\x1bUpdateSchemaVersionResponse\x12L\n" +
+	"\x0eschema_version\x18\x01 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\x12/\n" +
+	"\x13compatibility_notes\x18\x02 \x03(\tR\x12compatibilityNotes\"?\n" +
+	"\x1cValidateSchemaVersionRequest\x12\x1f\n" +
+	"\vschema_json\x18\x01 \x01(\tR\n" +
+	"schemaJson\"\x95\x02\n" +
+	"\x1dValidateSchemaVersionResponse\x12\x14\n" +
+	"\x05valid\x18\x01 \x01(\bR\x05valid\x12L\n" +
+	"\x0eschema_version\x18\x02 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\x12?\n" +
+	"\x06errors\x18\x03 \x03(\v2'.indexedwatch.schema.v1.ValidationErrorR\x06errors\x12/\n" +
+	"\x13compatibility_notes\x18\x04 \x03(\tR\x12compatibilityNotes\x12\x1e\n" +
+	"\vis_new_type\x18\x05 \x01(\bR\tisNewType\"\xaa\x01\n" +
+	"\x0fValidationError\x12J\n" +
+	"\n" +
+	"error_type\x18\x01 \x01(\x0e2+.indexedwatch.schema.v1.ValidationErrorTypeR\terrorType\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
+	"\x05field\x18\x03 \x01(\tR\x05field\x12\x1b\n" +
+	"\tjson_path\x18\x04 \x01(\tR\bjsonPath\"N\n" +
 	"\x1eSetCurrentSchemaVersionRequest\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"\x9a\x01\n" +
@@ -1115,7 +1525,18 @@ const file_indexedwatch_schema_v1_schema_proto_rawDesc = "" +
 	"\x14SchemaEvolutionError\x12H\n" +
 	"\tviolation\x18\x01 \x01(\x0e2*.indexedwatch.schema.v1.EvolutionViolationR\tviolation\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
-	"\x05field\x18\x03 \x01(\tR\x05field*\xdd\x01\n" +
+	"\x05field\x18\x03 \x01(\tR\x05field*\xca\x03\n" +
+	"\x13ValidationErrorType\x12%\n" +
+	"!VALIDATION_ERROR_TYPE_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"VALIDATION_ERROR_TYPE_INVALID_JSON\x10\x01\x12*\n" +
+	"&VALIDATION_ERROR_TYPE_MISSING_REQUIRED\x10\x02\x12,\n" +
+	"(VALIDATION_ERROR_TYPE_INVALID_FIELD_TYPE\x10\x03\x12-\n" +
+	")VALIDATION_ERROR_TYPE_INVALID_PRIMARY_KEY\x10\x04\x121\n" +
+	"-VALIDATION_ERROR_TYPE_INVALID_SECONDARY_INDEX\x10\x05\x12-\n" +
+	")VALIDATION_ERROR_TYPE_EVOLUTION_VIOLATION\x10\x06\x12%\n" +
+	"!VALIDATION_ERROR_TYPE_TYPE_EXISTS\x10\a\x12(\n" +
+	"$VALIDATION_ERROR_TYPE_TYPE_NOT_FOUND\x10\b\x12(\n" +
+	"$VALIDATION_ERROR_TYPE_VERSION_EXISTS\x10\t*\xdd\x01\n" +
 	"\tFieldType\x12\x1a\n" +
 	"\x16FIELD_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11FIELD_TYPE_STRING\x10\x01\x12\x14\n" +
@@ -1131,9 +1552,11 @@ const file_indexedwatch_schema_v1_schema_proto_rawDesc = "" +
 	"'EVOLUTION_VIOLATION_PRIMARY_KEY_CHANGED\x10\x01\x12*\n" +
 	"&EVOLUTION_VIOLATION_FIELD_TYPE_CHANGED\x10\x02\x121\n" +
 	"-EVOLUTION_VIOLATION_REQUIRED_FIELD_NO_DEFAULT\x10\x03\x12%\n" +
-	"!EVOLUTION_VIOLATION_FIELD_RENAMED\x10\x042\x8b\x05\n" +
+	"!EVOLUTION_VIOLATION_FIELD_RENAMED\x10\x042\x92\a\n" +
 	"\rSchemaService\x12\x84\x01\n" +
-	"\x15RegisterSchemaVersion\x124.indexedwatch.schema.v1.RegisterSchemaVersionRequest\x1a5.indexedwatch.schema.v1.RegisterSchemaVersionResponse\x12\x8a\x01\n" +
+	"\x15RegisterSchemaVersion\x124.indexedwatch.schema.v1.RegisterSchemaVersionRequest\x1a5.indexedwatch.schema.v1.RegisterSchemaVersionResponse\x12~\n" +
+	"\x13UpdateSchemaVersion\x122.indexedwatch.schema.v1.UpdateSchemaVersionRequest\x1a3.indexedwatch.schema.v1.UpdateSchemaVersionResponse\x12\x84\x01\n" +
+	"\x15ValidateSchemaVersion\x124.indexedwatch.schema.v1.ValidateSchemaVersionRequest\x1a5.indexedwatch.schema.v1.ValidateSchemaVersionResponse\x12\x8a\x01\n" +
 	"\x17SetCurrentSchemaVersion\x126.indexedwatch.schema.v1.SetCurrentSchemaVersionRequest\x1a7.indexedwatch.schema.v1.SetCurrentSchemaVersionResponse\x12u\n" +
 	"\x10GetSchemaVersion\x12/.indexedwatch.schema.v1.GetSchemaVersionRequest\x1a0.indexedwatch.schema.v1.GetSchemaVersionResponse\x12r\n" +
 	"\x0fListSchemaTypes\x12..indexedwatch.schema.v1.ListSchemaTypesRequest\x1a/.indexedwatch.schema.v1.ListSchemaTypesResponse\x12{\n" +
@@ -1152,55 +1575,69 @@ func file_indexedwatch_schema_v1_schema_proto_rawDescGZIP() []byte {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescData
 }
 
-var file_indexedwatch_schema_v1_schema_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_indexedwatch_schema_v1_schema_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_indexedwatch_schema_v1_schema_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_indexedwatch_schema_v1_schema_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_indexedwatch_schema_v1_schema_proto_goTypes = []any{
-	(FieldType)(0),                          // 0: indexedwatch.schema.v1.FieldType
-	(EvolutionViolation)(0),                 // 1: indexedwatch.schema.v1.EvolutionViolation
-	(*RegisterSchemaVersionRequest)(nil),    // 2: indexedwatch.schema.v1.RegisterSchemaVersionRequest
-	(*RegisterSchemaVersionResponse)(nil),   // 3: indexedwatch.schema.v1.RegisterSchemaVersionResponse
-	(*SetCurrentSchemaVersionRequest)(nil),  // 4: indexedwatch.schema.v1.SetCurrentSchemaVersionRequest
-	(*SetCurrentSchemaVersionResponse)(nil), // 5: indexedwatch.schema.v1.SetCurrentSchemaVersionResponse
-	(*GetSchemaVersionRequest)(nil),         // 6: indexedwatch.schema.v1.GetSchemaVersionRequest
-	(*GetSchemaVersionResponse)(nil),        // 7: indexedwatch.schema.v1.GetSchemaVersionResponse
-	(*ListSchemaTypesRequest)(nil),          // 8: indexedwatch.schema.v1.ListSchemaTypesRequest
-	(*ListSchemaTypesResponse)(nil),         // 9: indexedwatch.schema.v1.ListSchemaTypesResponse
-	(*ListSchemaVersionsRequest)(nil),       // 10: indexedwatch.schema.v1.ListSchemaVersionsRequest
-	(*ListSchemaVersionsResponse)(nil),      // 11: indexedwatch.schema.v1.ListSchemaVersionsResponse
-	(*SchemaVersion)(nil),                   // 12: indexedwatch.schema.v1.SchemaVersion
-	(*FieldDefinition)(nil),                 // 13: indexedwatch.schema.v1.FieldDefinition
-	(*SchemaVersionMetadata)(nil),           // 14: indexedwatch.schema.v1.SchemaVersionMetadata
-	(*SchemaEvolutionError)(nil),            // 15: indexedwatch.schema.v1.SchemaEvolutionError
-	nil,                                     // 16: indexedwatch.schema.v1.SchemaVersion.FieldsEntry
-	(*fieldmaskpb.FieldMask)(nil),           // 17: google.protobuf.FieldMask
+	(ValidationErrorType)(0),                // 0: indexedwatch.schema.v1.ValidationErrorType
+	(FieldType)(0),                          // 1: indexedwatch.schema.v1.FieldType
+	(EvolutionViolation)(0),                 // 2: indexedwatch.schema.v1.EvolutionViolation
+	(*RegisterSchemaVersionRequest)(nil),    // 3: indexedwatch.schema.v1.RegisterSchemaVersionRequest
+	(*RegisterSchemaVersionResponse)(nil),   // 4: indexedwatch.schema.v1.RegisterSchemaVersionResponse
+	(*UpdateSchemaVersionRequest)(nil),      // 5: indexedwatch.schema.v1.UpdateSchemaVersionRequest
+	(*UpdateSchemaVersionResponse)(nil),     // 6: indexedwatch.schema.v1.UpdateSchemaVersionResponse
+	(*ValidateSchemaVersionRequest)(nil),    // 7: indexedwatch.schema.v1.ValidateSchemaVersionRequest
+	(*ValidateSchemaVersionResponse)(nil),   // 8: indexedwatch.schema.v1.ValidateSchemaVersionResponse
+	(*ValidationError)(nil),                 // 9: indexedwatch.schema.v1.ValidationError
+	(*SetCurrentSchemaVersionRequest)(nil),  // 10: indexedwatch.schema.v1.SetCurrentSchemaVersionRequest
+	(*SetCurrentSchemaVersionResponse)(nil), // 11: indexedwatch.schema.v1.SetCurrentSchemaVersionResponse
+	(*GetSchemaVersionRequest)(nil),         // 12: indexedwatch.schema.v1.GetSchemaVersionRequest
+	(*GetSchemaVersionResponse)(nil),        // 13: indexedwatch.schema.v1.GetSchemaVersionResponse
+	(*ListSchemaTypesRequest)(nil),          // 14: indexedwatch.schema.v1.ListSchemaTypesRequest
+	(*ListSchemaTypesResponse)(nil),         // 15: indexedwatch.schema.v1.ListSchemaTypesResponse
+	(*ListSchemaVersionsRequest)(nil),       // 16: indexedwatch.schema.v1.ListSchemaVersionsRequest
+	(*ListSchemaVersionsResponse)(nil),      // 17: indexedwatch.schema.v1.ListSchemaVersionsResponse
+	(*SchemaVersion)(nil),                   // 18: indexedwatch.schema.v1.SchemaVersion
+	(*FieldDefinition)(nil),                 // 19: indexedwatch.schema.v1.FieldDefinition
+	(*SchemaVersionMetadata)(nil),           // 20: indexedwatch.schema.v1.SchemaVersionMetadata
+	(*SchemaEvolutionError)(nil),            // 21: indexedwatch.schema.v1.SchemaEvolutionError
+	nil,                                     // 22: indexedwatch.schema.v1.SchemaVersion.FieldsEntry
+	(*fieldmaskpb.FieldMask)(nil),           // 23: google.protobuf.FieldMask
 }
 var file_indexedwatch_schema_v1_schema_proto_depIdxs = []int32{
-	12, // 0: indexedwatch.schema.v1.RegisterSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
-	12, // 1: indexedwatch.schema.v1.SetCurrentSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
-	17, // 2: indexedwatch.schema.v1.GetSchemaVersionRequest.field_mask:type_name -> google.protobuf.FieldMask
-	12, // 3: indexedwatch.schema.v1.GetSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
-	12, // 4: indexedwatch.schema.v1.ListSchemaTypesResponse.schema_versions:type_name -> indexedwatch.schema.v1.SchemaVersion
-	12, // 5: indexedwatch.schema.v1.ListSchemaVersionsResponse.schema_versions:type_name -> indexedwatch.schema.v1.SchemaVersion
-	16, // 6: indexedwatch.schema.v1.SchemaVersion.fields:type_name -> indexedwatch.schema.v1.SchemaVersion.FieldsEntry
-	14, // 7: indexedwatch.schema.v1.SchemaVersion.metadata:type_name -> indexedwatch.schema.v1.SchemaVersionMetadata
-	0,  // 8: indexedwatch.schema.v1.FieldDefinition.type:type_name -> indexedwatch.schema.v1.FieldType
-	1,  // 9: indexedwatch.schema.v1.SchemaEvolutionError.violation:type_name -> indexedwatch.schema.v1.EvolutionViolation
-	13, // 10: indexedwatch.schema.v1.SchemaVersion.FieldsEntry.value:type_name -> indexedwatch.schema.v1.FieldDefinition
-	2,  // 11: indexedwatch.schema.v1.SchemaService.RegisterSchemaVersion:input_type -> indexedwatch.schema.v1.RegisterSchemaVersionRequest
-	4,  // 12: indexedwatch.schema.v1.SchemaService.SetCurrentSchemaVersion:input_type -> indexedwatch.schema.v1.SetCurrentSchemaVersionRequest
-	6,  // 13: indexedwatch.schema.v1.SchemaService.GetSchemaVersion:input_type -> indexedwatch.schema.v1.GetSchemaVersionRequest
-	8,  // 14: indexedwatch.schema.v1.SchemaService.ListSchemaTypes:input_type -> indexedwatch.schema.v1.ListSchemaTypesRequest
-	10, // 15: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:input_type -> indexedwatch.schema.v1.ListSchemaVersionsRequest
-	3,  // 16: indexedwatch.schema.v1.SchemaService.RegisterSchemaVersion:output_type -> indexedwatch.schema.v1.RegisterSchemaVersionResponse
-	5,  // 17: indexedwatch.schema.v1.SchemaService.SetCurrentSchemaVersion:output_type -> indexedwatch.schema.v1.SetCurrentSchemaVersionResponse
-	7,  // 18: indexedwatch.schema.v1.SchemaService.GetSchemaVersion:output_type -> indexedwatch.schema.v1.GetSchemaVersionResponse
-	9,  // 19: indexedwatch.schema.v1.SchemaService.ListSchemaTypes:output_type -> indexedwatch.schema.v1.ListSchemaTypesResponse
-	11, // 20: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:output_type -> indexedwatch.schema.v1.ListSchemaVersionsResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	18, // 0: indexedwatch.schema.v1.RegisterSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
+	18, // 1: indexedwatch.schema.v1.UpdateSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
+	18, // 2: indexedwatch.schema.v1.ValidateSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
+	9,  // 3: indexedwatch.schema.v1.ValidateSchemaVersionResponse.errors:type_name -> indexedwatch.schema.v1.ValidationError
+	0,  // 4: indexedwatch.schema.v1.ValidationError.error_type:type_name -> indexedwatch.schema.v1.ValidationErrorType
+	18, // 5: indexedwatch.schema.v1.SetCurrentSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
+	23, // 6: indexedwatch.schema.v1.GetSchemaVersionRequest.field_mask:type_name -> google.protobuf.FieldMask
+	18, // 7: indexedwatch.schema.v1.GetSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
+	18, // 8: indexedwatch.schema.v1.ListSchemaTypesResponse.schema_versions:type_name -> indexedwatch.schema.v1.SchemaVersion
+	18, // 9: indexedwatch.schema.v1.ListSchemaVersionsResponse.schema_versions:type_name -> indexedwatch.schema.v1.SchemaVersion
+	22, // 10: indexedwatch.schema.v1.SchemaVersion.fields:type_name -> indexedwatch.schema.v1.SchemaVersion.FieldsEntry
+	20, // 11: indexedwatch.schema.v1.SchemaVersion.metadata:type_name -> indexedwatch.schema.v1.SchemaVersionMetadata
+	1,  // 12: indexedwatch.schema.v1.FieldDefinition.type:type_name -> indexedwatch.schema.v1.FieldType
+	2,  // 13: indexedwatch.schema.v1.SchemaEvolutionError.violation:type_name -> indexedwatch.schema.v1.EvolutionViolation
+	19, // 14: indexedwatch.schema.v1.SchemaVersion.FieldsEntry.value:type_name -> indexedwatch.schema.v1.FieldDefinition
+	3,  // 15: indexedwatch.schema.v1.SchemaService.RegisterSchemaVersion:input_type -> indexedwatch.schema.v1.RegisterSchemaVersionRequest
+	5,  // 16: indexedwatch.schema.v1.SchemaService.UpdateSchemaVersion:input_type -> indexedwatch.schema.v1.UpdateSchemaVersionRequest
+	7,  // 17: indexedwatch.schema.v1.SchemaService.ValidateSchemaVersion:input_type -> indexedwatch.schema.v1.ValidateSchemaVersionRequest
+	10, // 18: indexedwatch.schema.v1.SchemaService.SetCurrentSchemaVersion:input_type -> indexedwatch.schema.v1.SetCurrentSchemaVersionRequest
+	12, // 19: indexedwatch.schema.v1.SchemaService.GetSchemaVersion:input_type -> indexedwatch.schema.v1.GetSchemaVersionRequest
+	14, // 20: indexedwatch.schema.v1.SchemaService.ListSchemaTypes:input_type -> indexedwatch.schema.v1.ListSchemaTypesRequest
+	16, // 21: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:input_type -> indexedwatch.schema.v1.ListSchemaVersionsRequest
+	4,  // 22: indexedwatch.schema.v1.SchemaService.RegisterSchemaVersion:output_type -> indexedwatch.schema.v1.RegisterSchemaVersionResponse
+	6,  // 23: indexedwatch.schema.v1.SchemaService.UpdateSchemaVersion:output_type -> indexedwatch.schema.v1.UpdateSchemaVersionResponse
+	8,  // 24: indexedwatch.schema.v1.SchemaService.ValidateSchemaVersion:output_type -> indexedwatch.schema.v1.ValidateSchemaVersionResponse
+	11, // 25: indexedwatch.schema.v1.SchemaService.SetCurrentSchemaVersion:output_type -> indexedwatch.schema.v1.SetCurrentSchemaVersionResponse
+	13, // 26: indexedwatch.schema.v1.SchemaService.GetSchemaVersion:output_type -> indexedwatch.schema.v1.GetSchemaVersionResponse
+	15, // 27: indexedwatch.schema.v1.SchemaService.ListSchemaTypes:output_type -> indexedwatch.schema.v1.ListSchemaTypesResponse
+	17, // 28: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:output_type -> indexedwatch.schema.v1.ListSchemaVersionsResponse
+	22, // [22:29] is the sub-list for method output_type
+	15, // [15:22] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_indexedwatch_schema_v1_schema_proto_init() }
@@ -1213,8 +1650,8 @@ func file_indexedwatch_schema_v1_schema_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_indexedwatch_schema_v1_schema_proto_rawDesc), len(file_indexedwatch_schema_v1_schema_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   15,
+			NumEnums:      3,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
