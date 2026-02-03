@@ -6,7 +6,7 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/subramanian/indexedwatch/gen/go
+      value: github.com/subganapathy/indexedwatch/gen/go
 
 plugins:
   # Generate Go protobuf code

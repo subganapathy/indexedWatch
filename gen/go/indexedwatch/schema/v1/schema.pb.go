@@ -1249,8 +1249,8 @@ const file_indexedwatch_schema_v1_schema_proto_rawDesc = "" +
 	"\x17SetCurrentSchemaVersion\x126.indexedwatch.schema.v1.SetCurrentSchemaVersionRequest\x1a7.indexedwatch.schema.v1.SetCurrentSchemaVersionResponse\x12u\n" +
 	"\x10GetSchemaVersion\x12/.indexedwatch.schema.v1.GetSchemaVersionRequest\x1a0.indexedwatch.schema.v1.GetSchemaVersionResponse\x12r\n" +
 	"\x0fListSchemaTypes\x12..indexedwatch.schema.v1.ListSchemaTypesRequest\x1a/.indexedwatch.schema.v1.ListSchemaTypesResponse\x12{\n" +
-	"\x12ListSchemaVersions\x121.indexedwatch.schema.v1.ListSchemaVersionsRequest\x1a2.indexedwatch.schema.v1.ListSchemaVersionsResponseB\xef\x01\n" +
-	"\x1acom.indexedwatch.schema.v1B\vSchemaProtoP\x01ZJgithub.com/subramanian/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1\xa2\x02\x03ISX\xaa\x02\x16Indexedwatch.Schema.V1\xca\x02\x16Indexedwatch\\Schema\\V1\xe2\x02\"Indexedwatch\\Schema\\V1\\GPBMetadata\xea\x02\x18Indexedwatch::Schema::V1b\x06proto3"
+	"\x12ListSchemaVersions\x121.indexedwatch.schema.v1.ListSchemaVersionsRequest\x1a2.indexedwatch.schema.v1.ListSchemaVersionsResponseB\xf0\x01\n" +
+	"\x1acom.indexedwatch.schema.v1B\vSchemaProtoP\x01ZKgithub.com/subganapathy/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1\xa2\x02\x03ISX\xaa\x02\x16Indexedwatch.Schema.V1\xca\x02\x16Indexedwatch\\Schema\\V1\xe2\x02\"Indexedwatch\\Schema\\V1\\GPBMetadata\xea\x02\x18Indexedwatch::Schema::V1b\x06proto3"
 
 var (
 	file_indexedwatch_schema_v1_schema_proto_rawDescOnce sync.Once

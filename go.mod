@@ -1,4 +1,4 @@
-module github.com/subramanian/indexedwatch
+module github.com/subganapathy/indexedwatch
 
 go 1.25.5
 
