@@ -27,8 +27,8 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
-# Generated code
-gen/
+# Generated code is checked in for reviewability
+# gen/
 
 # Build artifacts
 dist/
