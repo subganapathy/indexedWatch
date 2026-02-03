@@ -26,7 +26,6 @@ Following API versioning best practices:
 All RPCs use consistent "SchemaVersion" terminology:
 - `RegisterSchemaVersion` - creates first version of a new type
 - `UpdateSchemaVersion` - adds subsequent versions (with compatibility checks)
-- `ValidateSchemaVersion` - dry-run validation for CI/CD testing
 - `SetCurrentSchemaVersion` - explicitly activates a version
 - `GetSchemaVersion` - retrieves a specific version
 - `ListSchemaTypes` - lists all types (current version of each)
@@ -40,21 +39,24 @@ Clear semantic distinction:
 
 This prevents accidental type creation and makes the intent explicit.
 
-### 4. Dry-Run Validation for CI/CD
+### 4. Client-Side Validation (No Server Validate RPC)
 
-`ValidateSchemaVersion` enables testing schemas before registering:
-- Validates JSON syntax and field types
-- Checks compatibility with existing versions (if type exists)
-- Returns parsed schema for inspection
-- Indicates whether this would be Register or Update
-- No side effects - safe to call in pipelines
+Schema validation is done client-side via linting tools:
+- JSON syntax validation via standard JSON linters
+- Field type validation via schema definition linter
+- Evolution compatibility via fetching `ListSchemaVersions` and checking locally
+
+Benefits:
+- Simpler server API (6 RPCs instead of 7)
+- GitOps-friendly: lint in CI without server calls
+- Validation logic can be shared as a library
 
 ### 5. Explicit Version Activation (No Auto-Current)
 
 Neither `RegisterSchemaVersion` nor `UpdateSchemaVersion` auto-set current version.
 This enables safe production workflows:
 - Register/Update a new version
-- Test with `ValidateSchemaVersion` or integration tests
+- Test via integration tests
 - Explicitly activate via `SetCurrentSchemaVersion`
 - Rollback by setting current to a previous version
 
@@ -97,14 +99,7 @@ This enables flexible querying on JSON document structures.
 - State Machine for snapshot/PK lookups
 - LSMs for each secondary index
 
-### 9. Structured Validation Errors
-
-`ValidateSchemaVersionResponse` returns detailed error information:
-- `ValidationError` with type, message, field, and JSON path
-- `ValidationErrorType` enum for programmatic handling
-- `compatibility_notes` for evolution check results
-
-### 10. Pagination Support
+### 9. Pagination Support
 
 List APIs include pagination for scalability:
 - `page_size` - max results per page (default 100, max 1000)
@@ -112,11 +107,11 @@ List APIs include pagination for scalability:
 - `next_page_token` - returned in response
 - `total_count` - total matching items across all pages
 
-### 11. Field Mask Support
+### 10. Field Mask Support
 
 `GetSchemaVersionRequest` includes optional `google.protobuf.FieldMask` for partial responses.
 
-### 12. Evolution Rules Encoded in Proto
+### 11. Evolution Rules Encoded in Proto
 
 `SchemaEvolutionError` and `EvolutionViolation` make evolution rules explicit:
 - Primary key cannot change
@@ -132,9 +127,6 @@ service SchemaService {
 
   // Subsequent versions. Enforces evolution rules.
   rpc UpdateSchemaVersion(UpdateSchemaVersionRequest) returns (UpdateSchemaVersionResponse);
-
-  // Dry-run validation. No side effects.
-  rpc ValidateSchemaVersion(ValidateSchemaVersionRequest) returns (ValidateSchemaVersionResponse);
 
   // Explicitly sets current version. Enables rollback.
   rpc SetCurrentSchemaVersion(SetCurrentSchemaVersionRequest) returns (SetCurrentSchemaVersionResponse);
@@ -154,14 +146,14 @@ service SchemaService {
 
 ### New Type Registration
 ```
-1. ValidateSchemaVersion(schema_json)  # Test first
+1. Lint schema locally (CI job)
 2. RegisterSchemaVersion(schema_json)   # Create type + v1
 3. SetCurrentSchemaVersion(type, "v1")  # Activate
 ```
 
 ### Backwards-Compatible Update
 ```
-1. ValidateSchemaVersion(schema_json)    # Test compatibility
+1. Lint schema locally + check evolution rules (CI job)
 2. UpdateSchemaVersion(schema_json)      # Add v2
 3. SetCurrentSchemaVersion(type, "v2")   # Activate v2
 ```
@@ -170,6 +162,19 @@ service SchemaService {
 ```
 1. SetCurrentSchemaVersion(type, "v1")   # Back to v1
 ```
+
+## Future: Resource API Integration
+
+The Resource API (future PR) will allow specifying schema version on writes:
+```protobuf
+message CreateResourceRequest {
+  string type = 1;
+  string schema_version = 2;  // Explicit version to validate against
+  bytes data = 3;
+}
+```
+
+This enables gradual migration where some clients write v1, others write v2.
 
 ## Reference Code
 
@@ -186,7 +191,7 @@ N/A for proto definitions. Implementation PRs will address:
 
 1. **Proto3 best practices**:
    - Let buf managed mode handle `go_package`
-   - Prefix enums with type name (`FIELD_TYPE_STRING`, `VALIDATION_ERROR_TYPE_*`)
+   - Prefix enums with type name (`FIELD_TYPE_STRING`)
    - Use `google.protobuf.FieldMask` for partial responses
 
 2. **Buf tooling**:
@@ -197,14 +202,13 @@ N/A for proto definitions. Implementation PRs will address:
 3. **gRPC API design**:
    - Consistent naming (SchemaVersion throughout)
    - Separate Register vs Update for clear semantics
-   - Dry-run validation endpoint for CI/CD
+   - Client-side validation (simpler server, GitOps-friendly)
    - Explicit state transitions (SetCurrentSchemaVersion)
-   - Structured error responses for programmatic handling
 
 4. **GitOps-friendly API**:
    - Accept JSON strings for human-authored content
    - Return structured proto messages for programmatic access
-   - Validation endpoint for pipeline integration
+   - Client-side linting for pipeline integration
 
 ## Testing
 
@@ -234,7 +238,7 @@ go build ./...
 | Auto-current version is wrong | Added SetCurrentSchemaVersion for explicit activation |
 | ListSchemas unclear semantics | Renamed to ListSchemaTypes |
 | UpdateSchemaVersion needed | Added for backwards-compatible updates with evolution checks |
-| Validation/testing endpoint needed | Added ValidateSchemaVersion for dry-run testing |
+| Server-side validation unnecessary | Removed ValidateSchemaVersion; use client-side linting |
 
 ## Files Changed
 

@@ -21,7 +21,6 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	SchemaService_RegisterSchemaVersion_FullMethodName   = "/indexedwatch.schema.v1.SchemaService/RegisterSchemaVersion"
 	SchemaService_UpdateSchemaVersion_FullMethodName     = "/indexedwatch.schema.v1.SchemaService/UpdateSchemaVersion"
-	SchemaService_ValidateSchemaVersion_FullMethodName   = "/indexedwatch.schema.v1.SchemaService/ValidateSchemaVersion"
 	SchemaService_SetCurrentSchemaVersion_FullMethodName = "/indexedwatch.schema.v1.SchemaService/SetCurrentSchemaVersion"
 	SchemaService_GetSchemaVersion_FullMethodName        = "/indexedwatch.schema.v1.SchemaService/GetSchemaVersion"
 	SchemaService_ListSchemaTypes_FullMethodName         = "/indexedwatch.schema.v1.SchemaService/ListSchemaTypes"
@@ -39,9 +38,11 @@ const (
 // Workflow:
 // 1. RegisterSchemaVersion to create the first version of a new type
 // 2. UpdateSchemaVersion to add subsequent versions (with compatibility checks)
-// 3. ValidateSchemaVersion to test a schema before registering (dry-run)
-// 4. SetCurrentSchemaVersion to activate a version for writes
-// 5. Rollback by SetCurrentSchemaVersion to a previous version
+// 3. SetCurrentSchemaVersion to activate a version for writes
+// 4. Rollback by SetCurrentSchemaVersion to a previous version
+//
+// Validation: Use client-side linting for schema validation. Fetch existing
+// schemas via ListSchemaVersions to check evolution compatibility locally.
 type SchemaServiceClient interface {
 	// RegisterSchemaVersion creates the first version of a new schema type.
 	// Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
@@ -56,13 +57,6 @@ type SchemaServiceClient interface {
 	// - New required fields must have defaults
 	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
 	UpdateSchemaVersion(ctx context.Context, in *UpdateSchemaVersionRequest, opts ...grpc.CallOption) (*UpdateSchemaVersionResponse, error)
-	// ValidateSchemaVersion validates a schema without persisting it (dry-run).
-	// Use this in CI/CD pipelines to test schemas before registering.
-	// Checks:
-	// - JSON syntax and field type validity
-	// - If type exists: schema evolution compatibility with all existing versions
-	// - If type doesn't exist: standalone validation only
-	ValidateSchemaVersion(ctx context.Context, in *ValidateSchemaVersionRequest, opts ...grpc.CallOption) (*ValidateSchemaVersionResponse, error)
 	// SetCurrentSchemaVersion sets which version is the current (active) version.
 	// All new writes are validated against the current version.
 	// Use this to activate a new version or rollback to a previous one.
@@ -99,16 +93,6 @@ func (c *schemaServiceClient) UpdateSchemaVersion(ctx context.Context, in *Updat
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateSchemaVersionResponse)
 	err := c.cc.Invoke(ctx, SchemaService_UpdateSchemaVersion_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *schemaServiceClient) ValidateSchemaVersion(ctx context.Context, in *ValidateSchemaVersionRequest, opts ...grpc.CallOption) (*ValidateSchemaVersionResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ValidateSchemaVersionResponse)
-	err := c.cc.Invoke(ctx, SchemaService_ValidateSchemaVersion_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +150,11 @@ func (c *schemaServiceClient) ListSchemaVersions(ctx context.Context, in *ListSc
 // Workflow:
 // 1. RegisterSchemaVersion to create the first version of a new type
 // 2. UpdateSchemaVersion to add subsequent versions (with compatibility checks)
-// 3. ValidateSchemaVersion to test a schema before registering (dry-run)
-// 4. SetCurrentSchemaVersion to activate a version for writes
-// 5. Rollback by SetCurrentSchemaVersion to a previous version
+// 3. SetCurrentSchemaVersion to activate a version for writes
+// 4. Rollback by SetCurrentSchemaVersion to a previous version
+//
+// Validation: Use client-side linting for schema validation. Fetch existing
+// schemas via ListSchemaVersions to check evolution compatibility locally.
 type SchemaServiceServer interface {
 	// RegisterSchemaVersion creates the first version of a new schema type.
 	// Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
@@ -183,13 +169,6 @@ type SchemaServiceServer interface {
 	// - New required fields must have defaults
 	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
 	UpdateSchemaVersion(context.Context, *UpdateSchemaVersionRequest) (*UpdateSchemaVersionResponse, error)
-	// ValidateSchemaVersion validates a schema without persisting it (dry-run).
-	// Use this in CI/CD pipelines to test schemas before registering.
-	// Checks:
-	// - JSON syntax and field type validity
-	// - If type exists: schema evolution compatibility with all existing versions
-	// - If type doesn't exist: standalone validation only
-	ValidateSchemaVersion(context.Context, *ValidateSchemaVersionRequest) (*ValidateSchemaVersionResponse, error)
 	// SetCurrentSchemaVersion sets which version is the current (active) version.
 	// All new writes are validated against the current version.
 	// Use this to activate a new version or rollback to a previous one.
@@ -217,9 +196,6 @@ func (UnimplementedSchemaServiceServer) RegisterSchemaVersion(context.Context, *
 }
 func (UnimplementedSchemaServiceServer) UpdateSchemaVersion(context.Context, *UpdateSchemaVersionRequest) (*UpdateSchemaVersionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateSchemaVersion not implemented")
-}
-func (UnimplementedSchemaServiceServer) ValidateSchemaVersion(context.Context, *ValidateSchemaVersionRequest) (*ValidateSchemaVersionResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ValidateSchemaVersion not implemented")
 }
 func (UnimplementedSchemaServiceServer) SetCurrentSchemaVersion(context.Context, *SetCurrentSchemaVersionRequest) (*SetCurrentSchemaVersionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetCurrentSchemaVersion not implemented")
@@ -286,24 +262,6 @@ func _SchemaService_UpdateSchemaVersion_Handler(srv interface{}, ctx context.Con
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SchemaServiceServer).UpdateSchemaVersion(ctx, req.(*UpdateSchemaVersionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SchemaService_ValidateSchemaVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ValidateSchemaVersionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SchemaServiceServer).ValidateSchemaVersion(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SchemaService_ValidateSchemaVersion_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchemaServiceServer).ValidateSchemaVersion(ctx, req.(*ValidateSchemaVersionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -394,10 +352,6 @@ var SchemaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateSchemaVersion",
 			Handler:    _SchemaService_UpdateSchemaVersion_Handler,
-		},
-		{
-			MethodName: "ValidateSchemaVersion",
-			Handler:    _SchemaService_ValidateSchemaVersion_Handler,
 		},
 		{
 			MethodName: "SetCurrentSchemaVersion",
