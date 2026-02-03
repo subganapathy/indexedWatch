@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package indexedwatch.schema.v1;
 
-option go_package = "github.com/subramanian/indexedwatch/gen/go/schema/v1;schemav1";
+import "google/protobuf/field_mask.proto";
 
 // SchemaService manages resource type schemas.
 // Schemas define the structure of resources including primary key,
@@ -10,11 +10,14 @@ option go_package = "github.com/subramanian/indexedwatch/gen/go/schema/v1;schema
 service SchemaService {
   // RegisterSchema creates a new schema for a resource type.
   // The first version becomes the current (active) schema.
+  // This also provisions backend resources: WAL, State Machine, and LSMs
+  // for each secondary index defined in the schema.
   rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
 
   // UpdateSchema adds a new version of an existing schema.
   // The new version becomes the current schema for new writes.
   // Must follow schema evolution rules (see docs).
+  // Adding new secondary indexes will create additional LSMs.
   rpc UpdateSchema(UpdateSchemaRequest) returns (UpdateSchemaResponse);
 
   // GetSchema retrieves a specific schema by type and version.
@@ -30,8 +33,24 @@ service SchemaService {
 
 // RegisterSchemaRequest creates a new schema type.
 message RegisterSchemaRequest {
-  // The schema definition to register.
-  Schema schema = 1;
+  // The schema definition as a JSON string.
+  // Using JSON allows schemas to be version-controlled and deployed via CI/CD.
+  //
+  // Example:
+  // {
+  //   "type": "events",
+  //   "version": "v1",
+  //   "primaryKey": "id",
+  //   "secondaryIndexes": ["user_id", "metadata.region"],
+  //   "fields": {
+  //     "id": {"type": "string", "required": true},
+  //     "user_id": {"type": "string", "required": true},
+  //     "metadata": {"type": "object"}
+  //   }
+  // }
+  //
+  // Secondary indexes support dot notation for nested fields (e.g., "metadata.region").
+  string schema_json = 1;
 }
 
 message RegisterSchemaResponse {
@@ -44,8 +63,9 @@ message UpdateSchemaRequest {
   // The schema type to update. Must already exist.
   string type = 1;
 
-  // The new schema definition. Version must be unique for this type.
-  Schema schema = 2;
+  // The new schema definition as JSON string. Version must be unique for this type.
+  // See RegisterSchemaRequest for JSON format documentation.
+  string schema_json = 2;
 }
 
 message UpdateSchemaResponse {
@@ -60,6 +80,10 @@ message GetSchemaRequest {
 
   // The version to retrieve. If empty, returns the current version.
   string version = 2;
+
+  // Optional field mask to retrieve only specific fields.
+  // If not set, all fields are returned.
+  google.protobuf.FieldMask field_mask = 3;
 }
 
 message GetSchemaResponse {
@@ -71,16 +95,35 @@ message ListSchemasRequest {
   // If set, only return schemas for this type (all versions).
   // If empty, returns the current version of each type.
   string type = 1;
+
+  // Maximum number of schemas to return. Default is 100, max is 1000.
+  int32 page_size = 2;
+
+  // Token for pagination. Empty for first page.
+  // Use next_page_token from previous response.
+  string page_token = 3;
 }
 
 message ListSchemasResponse {
   repeated Schema schemas = 1;
+
+  // Token for next page. Empty if no more results.
+  string next_page_token = 2;
+
+  // Total count of schemas matching the filter (across all pages).
+  int32 total_count = 3;
 }
 
 // ListSchemaVersionsRequest lists all versions of a schema type.
 message ListSchemaVersionsRequest {
   // The schema type. Required.
   string type = 1;
+
+  // Maximum number of versions to return. Default is 100, max is 1000.
+  int32 page_size = 2;
+
+  // Token for pagination. Empty for first page.
+  string page_token = 3;
 }
 
 message ListSchemaVersionsResponse {
@@ -89,9 +132,16 @@ message ListSchemaVersionsResponse {
 
   // The current (active) version.
   string current_version = 2;
+
+  // Token for next page. Empty if no more results.
+  string next_page_token = 3;
+
+  // Total count of versions (across all pages).
+  int32 total_count = 4;
 }
 
 // Schema defines the structure of a resource type.
+// This message is returned by the server; clients submit schema_json.
 message Schema {
   // Unique identifier for this resource type. Immutable after creation.
   // Examples: "events", "users", "orders"
@@ -107,7 +157,8 @@ message Schema {
   string primary_key = 3;
 
   // Fields to create secondary indexes on.
-  // Each must reference a field defined in `fields`.
+  // Supports dot notation for nested fields (e.g., "metadata.region", "address.city").
+  // Each must reference a field or nested path within `fields`.
   // Can be added in schema updates (new records only indexed).
   repeated string secondary_indexes = 4;
 
@@ -158,7 +209,8 @@ enum FieldType {
   // RFC 3339 timestamp string.
   FIELD_TYPE_TIMESTAMP = 6;
 
-  // JSON object (nested structure, not indexed).
+  // JSON object (nested structure).
+  // Nested fields can be indexed using dot notation in secondary_indexes.
   FIELD_TYPE_OBJECT = 7;
 
   // JSON array (not indexed).

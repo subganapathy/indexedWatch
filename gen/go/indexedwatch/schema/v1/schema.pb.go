@@ -9,6 +9,7 @@ package schemav1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -38,7 +39,8 @@ const (
 	FieldType_FIELD_TYPE_BYTES FieldType = 5
 	// RFC 3339 timestamp string.
 	FieldType_FIELD_TYPE_TIMESTAMP FieldType = 6
-	// JSON object (nested structure, not indexed).
+	// JSON object (nested structure).
+	// Nested fields can be indexed using dot notation in secondary_indexes.
 	FieldType_FIELD_TYPE_OBJECT FieldType = 7
 	// JSON array (not indexed).
 	FieldType_FIELD_TYPE_ARRAY FieldType = 8
@@ -160,8 +162,25 @@ func (EvolutionViolation) EnumDescriptor() ([]byte, []int) {
 // RegisterSchemaRequest creates a new schema type.
 type RegisterSchemaRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema definition to register.
-	Schema        *Schema `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	// The schema definition as a JSON string.
+	// Using JSON allows schemas to be version-controlled and deployed via CI/CD.
+	//
+	// Example:
+	//
+	//	{
+	//	  "type": "events",
+	//	  "version": "v1",
+	//	  "primaryKey": "id",
+	//	  "secondaryIndexes": ["user_id", "metadata.region"],
+	//	  "fields": {
+	//	    "id": {"type": "string", "required": true},
+	//	    "user_id": {"type": "string", "required": true},
+	//	    "metadata": {"type": "object"}
+	//	  }
+	//	}
+	//
+	// Secondary indexes support dot notation for nested fields (e.g., "metadata.region").
+	SchemaJson    string `protobuf:"bytes,1,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -196,11 +215,11 @@ func (*RegisterSchemaRequest) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RegisterSchemaRequest) GetSchema() *Schema {
+func (x *RegisterSchemaRequest) GetSchemaJson() string {
 	if x != nil {
-		return x.Schema
+		return x.SchemaJson
 	}
-	return nil
+	return ""
 }
 
 type RegisterSchemaResponse struct {
@@ -253,8 +272,9 @@ type UpdateSchemaRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The schema type to update. Must already exist.
 	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// The new schema definition. Version must be unique for this type.
-	Schema        *Schema `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
+	// The new schema definition as JSON string. Version must be unique for this type.
+	// See RegisterSchemaRequest for JSON format documentation.
+	SchemaJson    string `protobuf:"bytes,2,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -296,11 +316,11 @@ func (x *UpdateSchemaRequest) GetType() string {
 	return ""
 }
 
-func (x *UpdateSchemaRequest) GetSchema() *Schema {
+func (x *UpdateSchemaRequest) GetSchemaJson() string {
 	if x != nil {
-		return x.Schema
+		return x.SchemaJson
 	}
-	return nil
+	return ""
 }
 
 type UpdateSchemaResponse struct {
@@ -354,7 +374,10 @@ type GetSchemaRequest struct {
 	// The schema type to retrieve. Required.
 	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	// The version to retrieve. If empty, returns the current version.
-	Version       string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Optional field mask to retrieve only specific fields.
+	// If not set, all fields are returned.
+	FieldMask     *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=field_mask,json=fieldMask,proto3" json:"field_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -401,6 +424,13 @@ func (x *GetSchemaRequest) GetVersion() string {
 		return x.Version
 	}
 	return ""
+}
+
+func (x *GetSchemaRequest) GetFieldMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.FieldMask
+	}
+	return nil
 }
 
 type GetSchemaResponse struct {
@@ -452,7 +482,12 @@ type ListSchemasRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// If set, only return schemas for this type (all versions).
 	// If empty, returns the current version of each type.
-	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// Maximum number of schemas to return. Default is 100, max is 1000.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token for pagination. Empty for first page.
+	// Use next_page_token from previous response.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -494,9 +529,27 @@ func (x *ListSchemasRequest) GetType() string {
 	return ""
 }
 
+func (x *ListSchemasRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListSchemasRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListSchemasResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Schemas       []*Schema              `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Schemas []*Schema              `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
+	// Token for next page. Empty if no more results.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// Total count of schemas matching the filter (across all pages).
+	TotalCount    int32 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -538,11 +591,29 @@ func (x *ListSchemasResponse) GetSchemas() []*Schema {
 	return nil
 }
 
+func (x *ListSchemasResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *ListSchemasResponse) GetTotalCount() int32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
 // ListSchemaVersionsRequest lists all versions of a schema type.
 type ListSchemaVersionsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The schema type. Required.
-	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// Maximum number of versions to return. Default is 100, max is 1000.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token for pagination. Empty for first page.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -584,14 +655,32 @@ func (x *ListSchemaVersionsRequest) GetType() string {
 	return ""
 }
 
+func (x *ListSchemaVersionsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListSchemaVersionsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListSchemaVersionsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// All versions of the schema, ordered by registration time.
 	Schemas []*Schema `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
 	// The current (active) version.
 	CurrentVersion string `protobuf:"bytes,2,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Token for next page. Empty if no more results.
+	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// Total count of versions (across all pages).
+	TotalCount    int32 `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListSchemaVersionsResponse) Reset() {
@@ -638,7 +727,22 @@ func (x *ListSchemaVersionsResponse) GetCurrentVersion() string {
 	return ""
 }
 
+func (x *ListSchemaVersionsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *ListSchemaVersionsResponse) GetTotalCount() int32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
 // Schema defines the structure of a resource type.
+// This message is returned by the server; clients submit schema_json.
 type Schema struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique identifier for this resource type. Immutable after creation.
@@ -652,7 +756,8 @@ type Schema struct {
 	// Cannot be changed after initial schema registration.
 	PrimaryKey string `protobuf:"bytes,3,opt,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
 	// Fields to create secondary indexes on.
-	// Each must reference a field defined in `fields`.
+	// Supports dot notation for nested fields (e.g., "metadata.region", "address.city").
+	// Each must reference a field or nested path within `fields`.
 	// Can be added in schema updates (new records only indexed).
 	SecondaryIndexes []string `protobuf:"bytes,4,rep,name=secondary_indexes,json=secondaryIndexes,proto3" json:"secondary_indexes,omitempty"`
 	// Field definitions for this schema.
@@ -945,30 +1050,46 @@ var File_indexedwatch_schema_v1_schema_proto protoreflect.FileDescriptor
 
 const file_indexedwatch_schema_v1_schema_proto_rawDesc = "" +
 	"\n" +
-	"#indexedwatch/schema/v1/schema.proto\x12\x16indexedwatch.schema.v1\"O\n" +
-	"\x15RegisterSchemaRequest\x126\n" +
-	"\x06schema\x18\x01 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"P\n" +
+	"#indexedwatch/schema/v1/schema.proto\x12\x16indexedwatch.schema.v1\x1a google/protobuf/field_mask.proto\"8\n" +
+	"\x15RegisterSchemaRequest\x12\x1f\n" +
+	"\vschema_json\x18\x01 \x01(\tR\n" +
+	"schemaJson\"P\n" +
 	"\x16RegisterSchemaResponse\x126\n" +
-	"\x06schema\x18\x01 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"a\n" +
+	"\x06schema\x18\x01 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"J\n" +
 	"\x13UpdateSchemaRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x126\n" +
-	"\x06schema\x18\x02 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"N\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1f\n" +
+	"\vschema_json\x18\x02 \x01(\tR\n" +
+	"schemaJson\"N\n" +
 	"\x14UpdateSchemaResponse\x126\n" +
-	"\x06schema\x18\x01 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"@\n" +
+	"\x06schema\x18\x01 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"{\n" +
 	"\x10GetSchemaRequest\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"K\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x129\n" +
+	"\n" +
+	"field_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskR\tfieldMask\"K\n" +
 	"\x11GetSchemaResponse\x126\n" +
-	"\x06schema\x18\x01 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"(\n" +
+	"\x06schema\x18\x01 \x01(\v2\x1e.indexedwatch.schema.v1.SchemaR\x06schema\"d\n" +
 	"\x12ListSchemasRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\"O\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x98\x01\n" +
 	"\x13ListSchemasResponse\x128\n" +
-	"\aschemas\x18\x01 \x03(\v2\x1e.indexedwatch.schema.v1.SchemaR\aschemas\"/\n" +
+	"\aschemas\x18\x01 \x03(\v2\x1e.indexedwatch.schema.v1.SchemaR\aschemas\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1f\n" +
+	"\vtotal_count\x18\x03 \x01(\x05R\n" +
+	"totalCount\"k\n" +
 	"\x19ListSchemaVersionsRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\"\x7f\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\xc8\x01\n" +
 	"\x1aListSchemaVersionsResponse\x128\n" +
 	"\aschemas\x18\x01 \x03(\v2\x1e.indexedwatch.schema.v1.SchemaR\aschemas\x12'\n" +
-	"\x0fcurrent_version\x18\x02 \x01(\tR\x0ecurrentVersion\"\xf0\x02\n" +
+	"\x0fcurrent_version\x18\x02 \x01(\tR\x0ecurrentVersion\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\x12\x1f\n" +
+	"\vtotal_count\x18\x04 \x01(\x05R\n" +
+	"totalCount\"\xf0\x02\n" +
 	"\x06Schema\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1f\n" +
@@ -1051,35 +1172,35 @@ var file_indexedwatch_schema_v1_schema_proto_goTypes = []any{
 	(*SchemaMetadata)(nil),             // 14: indexedwatch.schema.v1.SchemaMetadata
 	(*SchemaEvolutionError)(nil),       // 15: indexedwatch.schema.v1.SchemaEvolutionError
 	nil,                                // 16: indexedwatch.schema.v1.Schema.FieldsEntry
+	(*fieldmaskpb.FieldMask)(nil),      // 17: google.protobuf.FieldMask
 }
 var file_indexedwatch_schema_v1_schema_proto_depIdxs = []int32{
-	12, // 0: indexedwatch.schema.v1.RegisterSchemaRequest.schema:type_name -> indexedwatch.schema.v1.Schema
-	12, // 1: indexedwatch.schema.v1.RegisterSchemaResponse.schema:type_name -> indexedwatch.schema.v1.Schema
-	12, // 2: indexedwatch.schema.v1.UpdateSchemaRequest.schema:type_name -> indexedwatch.schema.v1.Schema
-	12, // 3: indexedwatch.schema.v1.UpdateSchemaResponse.schema:type_name -> indexedwatch.schema.v1.Schema
-	12, // 4: indexedwatch.schema.v1.GetSchemaResponse.schema:type_name -> indexedwatch.schema.v1.Schema
-	12, // 5: indexedwatch.schema.v1.ListSchemasResponse.schemas:type_name -> indexedwatch.schema.v1.Schema
-	12, // 6: indexedwatch.schema.v1.ListSchemaVersionsResponse.schemas:type_name -> indexedwatch.schema.v1.Schema
-	16, // 7: indexedwatch.schema.v1.Schema.fields:type_name -> indexedwatch.schema.v1.Schema.FieldsEntry
-	14, // 8: indexedwatch.schema.v1.Schema.metadata:type_name -> indexedwatch.schema.v1.SchemaMetadata
-	0,  // 9: indexedwatch.schema.v1.FieldDefinition.type:type_name -> indexedwatch.schema.v1.FieldType
-	1,  // 10: indexedwatch.schema.v1.SchemaEvolutionError.violation:type_name -> indexedwatch.schema.v1.EvolutionViolation
-	13, // 11: indexedwatch.schema.v1.Schema.FieldsEntry.value:type_name -> indexedwatch.schema.v1.FieldDefinition
-	2,  // 12: indexedwatch.schema.v1.SchemaService.RegisterSchema:input_type -> indexedwatch.schema.v1.RegisterSchemaRequest
-	4,  // 13: indexedwatch.schema.v1.SchemaService.UpdateSchema:input_type -> indexedwatch.schema.v1.UpdateSchemaRequest
-	6,  // 14: indexedwatch.schema.v1.SchemaService.GetSchema:input_type -> indexedwatch.schema.v1.GetSchemaRequest
-	8,  // 15: indexedwatch.schema.v1.SchemaService.ListSchemas:input_type -> indexedwatch.schema.v1.ListSchemasRequest
-	10, // 16: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:input_type -> indexedwatch.schema.v1.ListSchemaVersionsRequest
-	3,  // 17: indexedwatch.schema.v1.SchemaService.RegisterSchema:output_type -> indexedwatch.schema.v1.RegisterSchemaResponse
-	5,  // 18: indexedwatch.schema.v1.SchemaService.UpdateSchema:output_type -> indexedwatch.schema.v1.UpdateSchemaResponse
-	7,  // 19: indexedwatch.schema.v1.SchemaService.GetSchema:output_type -> indexedwatch.schema.v1.GetSchemaResponse
-	9,  // 20: indexedwatch.schema.v1.SchemaService.ListSchemas:output_type -> indexedwatch.schema.v1.ListSchemasResponse
-	11, // 21: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:output_type -> indexedwatch.schema.v1.ListSchemaVersionsResponse
-	17, // [17:22] is the sub-list for method output_type
-	12, // [12:17] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	12, // 0: indexedwatch.schema.v1.RegisterSchemaResponse.schema:type_name -> indexedwatch.schema.v1.Schema
+	12, // 1: indexedwatch.schema.v1.UpdateSchemaResponse.schema:type_name -> indexedwatch.schema.v1.Schema
+	17, // 2: indexedwatch.schema.v1.GetSchemaRequest.field_mask:type_name -> google.protobuf.FieldMask
+	12, // 3: indexedwatch.schema.v1.GetSchemaResponse.schema:type_name -> indexedwatch.schema.v1.Schema
+	12, // 4: indexedwatch.schema.v1.ListSchemasResponse.schemas:type_name -> indexedwatch.schema.v1.Schema
+	12, // 5: indexedwatch.schema.v1.ListSchemaVersionsResponse.schemas:type_name -> indexedwatch.schema.v1.Schema
+	16, // 6: indexedwatch.schema.v1.Schema.fields:type_name -> indexedwatch.schema.v1.Schema.FieldsEntry
+	14, // 7: indexedwatch.schema.v1.Schema.metadata:type_name -> indexedwatch.schema.v1.SchemaMetadata
+	0,  // 8: indexedwatch.schema.v1.FieldDefinition.type:type_name -> indexedwatch.schema.v1.FieldType
+	1,  // 9: indexedwatch.schema.v1.SchemaEvolutionError.violation:type_name -> indexedwatch.schema.v1.EvolutionViolation
+	13, // 10: indexedwatch.schema.v1.Schema.FieldsEntry.value:type_name -> indexedwatch.schema.v1.FieldDefinition
+	2,  // 11: indexedwatch.schema.v1.SchemaService.RegisterSchema:input_type -> indexedwatch.schema.v1.RegisterSchemaRequest
+	4,  // 12: indexedwatch.schema.v1.SchemaService.UpdateSchema:input_type -> indexedwatch.schema.v1.UpdateSchemaRequest
+	6,  // 13: indexedwatch.schema.v1.SchemaService.GetSchema:input_type -> indexedwatch.schema.v1.GetSchemaRequest
+	8,  // 14: indexedwatch.schema.v1.SchemaService.ListSchemas:input_type -> indexedwatch.schema.v1.ListSchemasRequest
+	10, // 15: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:input_type -> indexedwatch.schema.v1.ListSchemaVersionsRequest
+	3,  // 16: indexedwatch.schema.v1.SchemaService.RegisterSchema:output_type -> indexedwatch.schema.v1.RegisterSchemaResponse
+	5,  // 17: indexedwatch.schema.v1.SchemaService.UpdateSchema:output_type -> indexedwatch.schema.v1.UpdateSchemaResponse
+	7,  // 18: indexedwatch.schema.v1.SchemaService.GetSchema:output_type -> indexedwatch.schema.v1.GetSchemaResponse
+	9,  // 19: indexedwatch.schema.v1.SchemaService.ListSchemas:output_type -> indexedwatch.schema.v1.ListSchemasResponse
+	11, // 20: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:output_type -> indexedwatch.schema.v1.ListSchemaVersionsResponse
+	16, // [16:21] is the sub-list for method output_type
+	11, // [11:16] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_indexedwatch_schema_v1_schema_proto_init() }

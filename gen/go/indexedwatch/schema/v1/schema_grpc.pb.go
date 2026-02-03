@@ -36,10 +36,13 @@ const (
 type SchemaServiceClient interface {
 	// RegisterSchema creates a new schema for a resource type.
 	// The first version becomes the current (active) schema.
+	// This also provisions backend resources: WAL, State Machine, and LSMs
+	// for each secondary index defined in the schema.
 	RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error)
 	// UpdateSchema adds a new version of an existing schema.
 	// The new version becomes the current schema for new writes.
 	// Must follow schema evolution rules (see docs).
+	// Adding new secondary indexes will create additional LSMs.
 	UpdateSchema(ctx context.Context, in *UpdateSchemaRequest, opts ...grpc.CallOption) (*UpdateSchemaResponse, error)
 	// GetSchema retrieves a specific schema by type and version.
 	// If version is empty, returns the current schema.
@@ -118,10 +121,13 @@ func (c *schemaServiceClient) ListSchemaVersions(ctx context.Context, in *ListSc
 type SchemaServiceServer interface {
 	// RegisterSchema creates a new schema for a resource type.
 	// The first version becomes the current (active) schema.
+	// This also provisions backend resources: WAL, State Machine, and LSMs
+	// for each secondary index defined in the schema.
 	RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error)
 	// UpdateSchema adds a new version of an existing schema.
 	// The new version becomes the current schema for new writes.
 	// Must follow schema evolution rules (see docs).
+	// Adding new secondary indexes will create additional LSMs.
 	UpdateSchema(context.Context, *UpdateSchemaRequest) (*UpdateSchemaResponse, error)
 	// GetSchema retrieves a specific schema by type and version.
 	// If version is empty, returns the current schema.
