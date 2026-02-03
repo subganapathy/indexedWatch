@@ -9,27 +9,32 @@ import "google/protobuf/field_mask.proto";
 // secondary indexes, and field definitions.
 //
 // Workflow:
-// 1. RegisterSchemaVersion to create the first version of a new type
-// 2. UpdateSchemaVersion to add subsequent versions (with compatibility checks)
+// 1. RegisterSchemaVersion to register a new version (v1, v2, etc.)
+// 2. UpdateSchemaVersion to modify an existing version (add optional fields, etc.)
 // 3. SetCurrentSchemaVersion to activate a version for writes
 // 4. Rollback by SetCurrentSchemaVersion to a previous version
 //
 // Validation: Use client-side linting for schema validation. Fetch existing
 // schemas via ListSchemaVersions to check evolution compatibility locally.
 service SchemaService {
-  // RegisterSchemaVersion creates the first version of a new schema type.
-  // Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
+  // RegisterSchemaVersion registers a new version of a schema type.
+  // If the type doesn't exist, it is created along with backend resources
+  // (WAL, State Machine, and LSMs for each secondary index).
+  // If the type exists, adds the new version to the type's version list.
+  // Fails if the version already exists for this type.
   // Does NOT automatically set as current - use SetCurrentSchemaVersion.
-  // Provisions backend resources: WAL, State Machine, and LSMs for each secondary index.
   rpc RegisterSchemaVersion(RegisterSchemaVersionRequest) returns (RegisterSchemaVersionResponse);
 
-  // UpdateSchemaVersion adds a new version to an existing schema type.
-  // Fails if the type doesn't exist - use RegisterSchemaVersion for the first version.
+  // UpdateSchemaVersion updates an existing schema version in place.
+  // Use for backwards-compatible changes to an existing version:
+  // - Adding optional fields
+  // - Adding new secondary indexes
+  // - Updating field descriptions
   // Enforces schema evolution rules:
   // - Primary key cannot change
   // - Field types cannot change
   // - New required fields must have defaults
-  // Does NOT automatically set as current - use SetCurrentSchemaVersion.
+  // Fails if the type or version doesn't exist.
   rpc UpdateSchemaVersion(UpdateSchemaVersionRequest) returns (UpdateSchemaVersionResponse);
 
   // SetCurrentSchemaVersion sets which version is the current (active) version.
@@ -49,11 +54,10 @@ service SchemaService {
   rpc ListSchemaVersions(ListSchemaVersionsRequest) returns (ListSchemaVersionsResponse);
 }
 
-// RegisterSchemaVersionRequest creates the first version of a new schema type.
+// RegisterSchemaVersionRequest registers a new version of a schema type.
 message RegisterSchemaVersionRequest {
   // The schema definition as a JSON string.
   // Using JSON allows schemas to be version-controlled and deployed via CI/CD.
-  // Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
   //
   // Example:
   // {
@@ -70,6 +74,7 @@ message RegisterSchemaVersionRequest {
   //
   // Secondary indexes support dot notation for nested fields (e.g., "metadata.region").
   // Type and version are parsed from the JSON - no separate fields needed.
+  // Fails if this version already exists for the type.
   string schema_json = 1;
 }
 
@@ -78,22 +83,21 @@ message RegisterSchemaVersionResponse {
   SchemaVersion schema_version = 1;
 }
 
-// UpdateSchemaVersionRequest adds a new version to an existing type.
+// UpdateSchemaVersionRequest updates an existing version in place.
 message UpdateSchemaVersionRequest {
-  // The schema definition as a JSON string.
-  // Type must already exist (use RegisterSchemaVersion for new types).
-  // Version must be unique for this type.
+  // The updated schema definition as a JSON string.
+  // Type and version must already exist.
   // Must pass schema evolution compatibility checks.
   // See RegisterSchemaVersionRequest for JSON format documentation.
   string schema_json = 1;
 }
 
 message UpdateSchemaVersionResponse {
-  // The new schema version with server-assigned metadata.
+  // The updated schema version with server-assigned metadata.
   SchemaVersion schema_version = 1;
 
   // Compatibility check results (informational).
-  // Lists what changed from the previous version.
+  // Lists what changed from the previous schema.
   repeated string compatibility_notes = 2;
 }
 

@@ -159,12 +159,11 @@ func (EvolutionViolation) EnumDescriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{1}
 }
 
-// RegisterSchemaVersionRequest creates the first version of a new schema type.
+// RegisterSchemaVersionRequest registers a new version of a schema type.
 type RegisterSchemaVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The schema definition as a JSON string.
 	// Using JSON allows schemas to be version-controlled and deployed via CI/CD.
-	// Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
 	//
 	// Example:
 	//
@@ -182,6 +181,7 @@ type RegisterSchemaVersionRequest struct {
 	//
 	// Secondary indexes support dot notation for nested fields (e.g., "metadata.region").
 	// Type and version are parsed from the JSON - no separate fields needed.
+	// Fails if this version already exists for the type.
 	SchemaJson    string `protobuf:"bytes,1,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -269,12 +269,11 @@ func (x *RegisterSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
 	return nil
 }
 
-// UpdateSchemaVersionRequest adds a new version to an existing type.
+// UpdateSchemaVersionRequest updates an existing version in place.
 type UpdateSchemaVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema definition as a JSON string.
-	// Type must already exist (use RegisterSchemaVersion for new types).
-	// Version must be unique for this type.
+	// The updated schema definition as a JSON string.
+	// Type and version must already exist.
 	// Must pass schema evolution compatibility checks.
 	// See RegisterSchemaVersionRequest for JSON format documentation.
 	SchemaJson    string `protobuf:"bytes,1,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
@@ -321,10 +320,10 @@ func (x *UpdateSchemaVersionRequest) GetSchemaJson() string {
 
 type UpdateSchemaVersionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The new schema version with server-assigned metadata.
+	// The updated schema version with server-assigned metadata.
 	SchemaVersion *SchemaVersion `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	// Compatibility check results (informational).
-	// Lists what changed from the previous version.
+	// Lists what changed from the previous schema.
 	CompatibilityNotes []string `protobuf:"bytes,2,rep,name=compatibility_notes,json=compatibilityNotes,proto3" json:"compatibility_notes,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache

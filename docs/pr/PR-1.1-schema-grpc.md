@@ -34,10 +34,12 @@ All RPCs use consistent "SchemaVersion" terminology:
 ### 3. Separate Register vs Update
 
 Clear semantic distinction:
-- `RegisterSchemaVersion` - first version of a NEW type; provisions backend resources
-- `UpdateSchemaVersion` - subsequent versions of EXISTING type; enforces evolution rules
+- `RegisterSchemaVersion` - registers a NEW version (v1, v2, v3...). Creates type + resources if type doesn't exist.
+- `UpdateSchemaVersion` - modifies an EXISTING version in place (add optional fields, new indexes, etc.)
 
-This prevents accidental type creation and makes the intent explicit.
+This allows:
+- Creating new versions when needed (Register)
+- Evolving existing versions without version churn (Update)
 
 ### 4. Client-Side Validation (No Server Validate RPC)
 
@@ -122,10 +124,10 @@ List APIs include pagination for scalability:
 
 ```protobuf
 service SchemaService {
-  // First version of a new type. Provisions backend resources.
+  // Register a new version (v1, v2, etc.). Creates type if needed.
   rpc RegisterSchemaVersion(RegisterSchemaVersionRequest) returns (RegisterSchemaVersionResponse);
 
-  // Subsequent versions. Enforces evolution rules.
+  // Update an existing version in place (add fields, indexes, etc.).
   rpc UpdateSchemaVersion(UpdateSchemaVersionRequest) returns (UpdateSchemaVersionResponse);
 
   // Explicitly sets current version. Enables rollback.
@@ -151,11 +153,18 @@ service SchemaService {
 3. SetCurrentSchemaVersion(type, "v1")  # Activate
 ```
 
-### Backwards-Compatible Update
+### Add New Version
+```
+1. Lint schema locally (CI job)
+2. RegisterSchemaVersion(schema_json)   # Add v2 to existing type
+3. SetCurrentSchemaVersion(type, "v2")  # Activate v2
+```
+
+### Update Existing Version (add optional fields, indexes)
 ```
 1. Lint schema locally + check evolution rules (CI job)
-2. UpdateSchemaVersion(schema_json)      # Add v2
-3. SetCurrentSchemaVersion(type, "v2")   # Activate v2
+2. UpdateSchemaVersion(schema_json)     # Modify v1 in place
+# No SetCurrentSchemaVersion needed - v1 is already current
 ```
 
 ### Rollback
@@ -237,7 +246,8 @@ go build ./...
 | Naming inconsistency (Schema vs Version) | Renamed all RPCs to use "SchemaVersion" consistently |
 | Auto-current version is wrong | Added SetCurrentSchemaVersion for explicit activation |
 | ListSchemas unclear semantics | Renamed to ListSchemaTypes |
-| UpdateSchemaVersion needed | Added for backwards-compatible updates with evolution checks |
+| UpdateSchemaVersion needed | Added for in-place updates to existing versions |
+| Register vs Update semantics | Register=new version, Update=modify existing version |
 | Server-side validation unnecessary | Removed ValidateSchemaVersion; use client-side linting |
 
 ## Files Changed

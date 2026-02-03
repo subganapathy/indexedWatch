@@ -36,26 +36,31 @@ const (
 // secondary indexes, and field definitions.
 //
 // Workflow:
-// 1. RegisterSchemaVersion to create the first version of a new type
-// 2. UpdateSchemaVersion to add subsequent versions (with compatibility checks)
+// 1. RegisterSchemaVersion to register a new version (v1, v2, etc.)
+// 2. UpdateSchemaVersion to modify an existing version (add optional fields, etc.)
 // 3. SetCurrentSchemaVersion to activate a version for writes
 // 4. Rollback by SetCurrentSchemaVersion to a previous version
 //
 // Validation: Use client-side linting for schema validation. Fetch existing
 // schemas via ListSchemaVersions to check evolution compatibility locally.
 type SchemaServiceClient interface {
-	// RegisterSchemaVersion creates the first version of a new schema type.
-	// Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
+	// RegisterSchemaVersion registers a new version of a schema type.
+	// If the type doesn't exist, it is created along with backend resources
+	// (WAL, State Machine, and LSMs for each secondary index).
+	// If the type exists, adds the new version to the type's version list.
+	// Fails if the version already exists for this type.
 	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
-	// Provisions backend resources: WAL, State Machine, and LSMs for each secondary index.
 	RegisterSchemaVersion(ctx context.Context, in *RegisterSchemaVersionRequest, opts ...grpc.CallOption) (*RegisterSchemaVersionResponse, error)
-	// UpdateSchemaVersion adds a new version to an existing schema type.
-	// Fails if the type doesn't exist - use RegisterSchemaVersion for the first version.
+	// UpdateSchemaVersion updates an existing schema version in place.
+	// Use for backwards-compatible changes to an existing version:
+	// - Adding optional fields
+	// - Adding new secondary indexes
+	// - Updating field descriptions
 	// Enforces schema evolution rules:
 	// - Primary key cannot change
 	// - Field types cannot change
 	// - New required fields must have defaults
-	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
+	// Fails if the type or version doesn't exist.
 	UpdateSchemaVersion(ctx context.Context, in *UpdateSchemaVersionRequest, opts ...grpc.CallOption) (*UpdateSchemaVersionResponse, error)
 	// SetCurrentSchemaVersion sets which version is the current (active) version.
 	// All new writes are validated against the current version.
@@ -148,26 +153,31 @@ func (c *schemaServiceClient) ListSchemaVersions(ctx context.Context, in *ListSc
 // secondary indexes, and field definitions.
 //
 // Workflow:
-// 1. RegisterSchemaVersion to create the first version of a new type
-// 2. UpdateSchemaVersion to add subsequent versions (with compatibility checks)
+// 1. RegisterSchemaVersion to register a new version (v1, v2, etc.)
+// 2. UpdateSchemaVersion to modify an existing version (add optional fields, etc.)
 // 3. SetCurrentSchemaVersion to activate a version for writes
 // 4. Rollback by SetCurrentSchemaVersion to a previous version
 //
 // Validation: Use client-side linting for schema validation. Fetch existing
 // schemas via ListSchemaVersions to check evolution compatibility locally.
 type SchemaServiceServer interface {
-	// RegisterSchemaVersion creates the first version of a new schema type.
-	// Fails if the type already exists - use UpdateSchemaVersion for subsequent versions.
+	// RegisterSchemaVersion registers a new version of a schema type.
+	// If the type doesn't exist, it is created along with backend resources
+	// (WAL, State Machine, and LSMs for each secondary index).
+	// If the type exists, adds the new version to the type's version list.
+	// Fails if the version already exists for this type.
 	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
-	// Provisions backend resources: WAL, State Machine, and LSMs for each secondary index.
 	RegisterSchemaVersion(context.Context, *RegisterSchemaVersionRequest) (*RegisterSchemaVersionResponse, error)
-	// UpdateSchemaVersion adds a new version to an existing schema type.
-	// Fails if the type doesn't exist - use RegisterSchemaVersion for the first version.
+	// UpdateSchemaVersion updates an existing schema version in place.
+	// Use for backwards-compatible changes to an existing version:
+	// - Adding optional fields
+	// - Adding new secondary indexes
+	// - Updating field descriptions
 	// Enforces schema evolution rules:
 	// - Primary key cannot change
 	// - Field types cannot change
 	// - New required fields must have defaults
-	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
+	// Fails if the type or version doesn't exist.
 	UpdateSchemaVersion(context.Context, *UpdateSchemaVersionRequest) (*UpdateSchemaVersionResponse, error)
 	// SetCurrentSchemaVersion sets which version is the current (active) version.
 	// All new writes are validated against the current version.
