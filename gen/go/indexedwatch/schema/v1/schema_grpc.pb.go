@@ -19,36 +19,42 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SchemaService_RegisterSchema_FullMethodName     = "/indexedwatch.schema.v1.SchemaService/RegisterSchema"
-	SchemaService_UpdateSchema_FullMethodName       = "/indexedwatch.schema.v1.SchemaService/UpdateSchema"
-	SchemaService_GetSchema_FullMethodName          = "/indexedwatch.schema.v1.SchemaService/GetSchema"
-	SchemaService_ListSchemas_FullMethodName        = "/indexedwatch.schema.v1.SchemaService/ListSchemas"
-	SchemaService_ListSchemaVersions_FullMethodName = "/indexedwatch.schema.v1.SchemaService/ListSchemaVersions"
+	SchemaService_RegisterSchemaVersion_FullMethodName   = "/indexedwatch.schema.v1.SchemaService/RegisterSchemaVersion"
+	SchemaService_SetCurrentSchemaVersion_FullMethodName = "/indexedwatch.schema.v1.SchemaService/SetCurrentSchemaVersion"
+	SchemaService_GetSchemaVersion_FullMethodName        = "/indexedwatch.schema.v1.SchemaService/GetSchemaVersion"
+	SchemaService_ListSchemaTypes_FullMethodName         = "/indexedwatch.schema.v1.SchemaService/ListSchemaTypes"
+	SchemaService_ListSchemaVersions_FullMethodName      = "/indexedwatch.schema.v1.SchemaService/ListSchemaVersions"
 )
 
 // SchemaServiceClient is the client API for SchemaService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SchemaService manages resource type schemas.
+// SchemaService manages schema versions for resource types.
 // Schemas define the structure of resources including primary key,
 // secondary indexes, and field definitions.
+//
+// Workflow:
+// 1. RegisterSchemaVersion to create a new version (creates type if new)
+// 2. SetCurrentSchemaVersion to activate a version for writes
+// 3. Rollback by SetCurrentSchemaVersion to a previous version
 type SchemaServiceClient interface {
-	// RegisterSchema creates a new schema for a resource type.
-	// The first version becomes the current (active) schema.
-	// This also provisions backend resources: WAL, State Machine, and LSMs
-	// for each secondary index defined in the schema.
-	RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error)
-	// UpdateSchema adds a new version of an existing schema.
-	// The new version becomes the current schema for new writes.
-	// Must follow schema evolution rules (see docs).
-	// Adding new secondary indexes will create additional LSMs.
-	UpdateSchema(ctx context.Context, in *UpdateSchemaRequest, opts ...grpc.CallOption) (*UpdateSchemaResponse, error)
-	// GetSchema retrieves a specific schema by type and version.
-	// If version is empty, returns the current schema.
-	GetSchema(ctx context.Context, in *GetSchemaRequest, opts ...grpc.CallOption) (*GetSchemaResponse, error)
-	// ListSchemas returns all schemas, optionally filtered by type.
-	ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error)
+	// RegisterSchemaVersion creates a new schema version.
+	// If the type doesn't exist, it is created.
+	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
+	// This also provisions backend resources on first version:
+	// WAL, State Machine, and LSMs for each secondary index.
+	RegisterSchemaVersion(ctx context.Context, in *RegisterSchemaVersionRequest, opts ...grpc.CallOption) (*RegisterSchemaVersionResponse, error)
+	// SetCurrentSchemaVersion sets which version is the current (active) version.
+	// All new writes are validated against the current version.
+	// Use this to activate a new version or rollback to a previous one.
+	SetCurrentSchemaVersion(ctx context.Context, in *SetCurrentSchemaVersionRequest, opts ...grpc.CallOption) (*SetCurrentSchemaVersionResponse, error)
+	// GetSchemaVersion retrieves a specific schema version.
+	// If version is empty, returns the current version.
+	GetSchemaVersion(ctx context.Context, in *GetSchemaVersionRequest, opts ...grpc.CallOption) (*GetSchemaVersionResponse, error)
+	// ListSchemaTypes returns all schema types.
+	// Returns the current version of each type by default.
+	ListSchemaTypes(ctx context.Context, in *ListSchemaTypesRequest, opts ...grpc.CallOption) (*ListSchemaTypesResponse, error)
 	// ListSchemaVersions returns all versions of a schema type.
 	ListSchemaVersions(ctx context.Context, in *ListSchemaVersionsRequest, opts ...grpc.CallOption) (*ListSchemaVersionsResponse, error)
 }
@@ -61,40 +67,40 @@ func NewSchemaServiceClient(cc grpc.ClientConnInterface) SchemaServiceClient {
 	return &schemaServiceClient{cc}
 }
 
-func (c *schemaServiceClient) RegisterSchema(ctx context.Context, in *RegisterSchemaRequest, opts ...grpc.CallOption) (*RegisterSchemaResponse, error) {
+func (c *schemaServiceClient) RegisterSchemaVersion(ctx context.Context, in *RegisterSchemaVersionRequest, opts ...grpc.CallOption) (*RegisterSchemaVersionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RegisterSchemaResponse)
-	err := c.cc.Invoke(ctx, SchemaService_RegisterSchema_FullMethodName, in, out, cOpts...)
+	out := new(RegisterSchemaVersionResponse)
+	err := c.cc.Invoke(ctx, SchemaService_RegisterSchemaVersion_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *schemaServiceClient) UpdateSchema(ctx context.Context, in *UpdateSchemaRequest, opts ...grpc.CallOption) (*UpdateSchemaResponse, error) {
+func (c *schemaServiceClient) SetCurrentSchemaVersion(ctx context.Context, in *SetCurrentSchemaVersionRequest, opts ...grpc.CallOption) (*SetCurrentSchemaVersionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UpdateSchemaResponse)
-	err := c.cc.Invoke(ctx, SchemaService_UpdateSchema_FullMethodName, in, out, cOpts...)
+	out := new(SetCurrentSchemaVersionResponse)
+	err := c.cc.Invoke(ctx, SchemaService_SetCurrentSchemaVersion_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *schemaServiceClient) GetSchema(ctx context.Context, in *GetSchemaRequest, opts ...grpc.CallOption) (*GetSchemaResponse, error) {
+func (c *schemaServiceClient) GetSchemaVersion(ctx context.Context, in *GetSchemaVersionRequest, opts ...grpc.CallOption) (*GetSchemaVersionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetSchemaResponse)
-	err := c.cc.Invoke(ctx, SchemaService_GetSchema_FullMethodName, in, out, cOpts...)
+	out := new(GetSchemaVersionResponse)
+	err := c.cc.Invoke(ctx, SchemaService_GetSchemaVersion_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *schemaServiceClient) ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error) {
+func (c *schemaServiceClient) ListSchemaTypes(ctx context.Context, in *ListSchemaTypesRequest, opts ...grpc.CallOption) (*ListSchemaTypesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListSchemasResponse)
-	err := c.cc.Invoke(ctx, SchemaService_ListSchemas_FullMethodName, in, out, cOpts...)
+	out := new(ListSchemaTypesResponse)
+	err := c.cc.Invoke(ctx, SchemaService_ListSchemaTypes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -115,25 +121,31 @@ func (c *schemaServiceClient) ListSchemaVersions(ctx context.Context, in *ListSc
 // All implementations must embed UnimplementedSchemaServiceServer
 // for forward compatibility.
 //
-// SchemaService manages resource type schemas.
+// SchemaService manages schema versions for resource types.
 // Schemas define the structure of resources including primary key,
 // secondary indexes, and field definitions.
+//
+// Workflow:
+// 1. RegisterSchemaVersion to create a new version (creates type if new)
+// 2. SetCurrentSchemaVersion to activate a version for writes
+// 3. Rollback by SetCurrentSchemaVersion to a previous version
 type SchemaServiceServer interface {
-	// RegisterSchema creates a new schema for a resource type.
-	// The first version becomes the current (active) schema.
-	// This also provisions backend resources: WAL, State Machine, and LSMs
-	// for each secondary index defined in the schema.
-	RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error)
-	// UpdateSchema adds a new version of an existing schema.
-	// The new version becomes the current schema for new writes.
-	// Must follow schema evolution rules (see docs).
-	// Adding new secondary indexes will create additional LSMs.
-	UpdateSchema(context.Context, *UpdateSchemaRequest) (*UpdateSchemaResponse, error)
-	// GetSchema retrieves a specific schema by type and version.
-	// If version is empty, returns the current schema.
-	GetSchema(context.Context, *GetSchemaRequest) (*GetSchemaResponse, error)
-	// ListSchemas returns all schemas, optionally filtered by type.
-	ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error)
+	// RegisterSchemaVersion creates a new schema version.
+	// If the type doesn't exist, it is created.
+	// Does NOT automatically set as current - use SetCurrentSchemaVersion.
+	// This also provisions backend resources on first version:
+	// WAL, State Machine, and LSMs for each secondary index.
+	RegisterSchemaVersion(context.Context, *RegisterSchemaVersionRequest) (*RegisterSchemaVersionResponse, error)
+	// SetCurrentSchemaVersion sets which version is the current (active) version.
+	// All new writes are validated against the current version.
+	// Use this to activate a new version or rollback to a previous one.
+	SetCurrentSchemaVersion(context.Context, *SetCurrentSchemaVersionRequest) (*SetCurrentSchemaVersionResponse, error)
+	// GetSchemaVersion retrieves a specific schema version.
+	// If version is empty, returns the current version.
+	GetSchemaVersion(context.Context, *GetSchemaVersionRequest) (*GetSchemaVersionResponse, error)
+	// ListSchemaTypes returns all schema types.
+	// Returns the current version of each type by default.
+	ListSchemaTypes(context.Context, *ListSchemaTypesRequest) (*ListSchemaTypesResponse, error)
 	// ListSchemaVersions returns all versions of a schema type.
 	ListSchemaVersions(context.Context, *ListSchemaVersionsRequest) (*ListSchemaVersionsResponse, error)
 	mustEmbedUnimplementedSchemaServiceServer()
@@ -146,17 +158,17 @@ type SchemaServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSchemaServiceServer struct{}
 
-func (UnimplementedSchemaServiceServer) RegisterSchema(context.Context, *RegisterSchemaRequest) (*RegisterSchemaResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RegisterSchema not implemented")
+func (UnimplementedSchemaServiceServer) RegisterSchemaVersion(context.Context, *RegisterSchemaVersionRequest) (*RegisterSchemaVersionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterSchemaVersion not implemented")
 }
-func (UnimplementedSchemaServiceServer) UpdateSchema(context.Context, *UpdateSchemaRequest) (*UpdateSchemaResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateSchema not implemented")
+func (UnimplementedSchemaServiceServer) SetCurrentSchemaVersion(context.Context, *SetCurrentSchemaVersionRequest) (*SetCurrentSchemaVersionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetCurrentSchemaVersion not implemented")
 }
-func (UnimplementedSchemaServiceServer) GetSchema(context.Context, *GetSchemaRequest) (*GetSchemaResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetSchema not implemented")
+func (UnimplementedSchemaServiceServer) GetSchemaVersion(context.Context, *GetSchemaVersionRequest) (*GetSchemaVersionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSchemaVersion not implemented")
 }
-func (UnimplementedSchemaServiceServer) ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListSchemas not implemented")
+func (UnimplementedSchemaServiceServer) ListSchemaTypes(context.Context, *ListSchemaTypesRequest) (*ListSchemaTypesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSchemaTypes not implemented")
 }
 func (UnimplementedSchemaServiceServer) ListSchemaVersions(context.Context, *ListSchemaVersionsRequest) (*ListSchemaVersionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSchemaVersions not implemented")
@@ -182,74 +194,74 @@ func RegisterSchemaServiceServer(s grpc.ServiceRegistrar, srv SchemaServiceServe
 	s.RegisterService(&SchemaService_ServiceDesc, srv)
 }
 
-func _SchemaService_RegisterSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterSchemaRequest)
+func _SchemaService_RegisterSchemaVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterSchemaVersionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SchemaServiceServer).RegisterSchema(ctx, in)
+		return srv.(SchemaServiceServer).RegisterSchemaVersion(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SchemaService_RegisterSchema_FullMethodName,
+		FullMethod: SchemaService_RegisterSchemaVersion_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchemaServiceServer).RegisterSchema(ctx, req.(*RegisterSchemaRequest))
+		return srv.(SchemaServiceServer).RegisterSchemaVersion(ctx, req.(*RegisterSchemaVersionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SchemaService_UpdateSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateSchemaRequest)
+func _SchemaService_SetCurrentSchemaVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetCurrentSchemaVersionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SchemaServiceServer).UpdateSchema(ctx, in)
+		return srv.(SchemaServiceServer).SetCurrentSchemaVersion(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SchemaService_UpdateSchema_FullMethodName,
+		FullMethod: SchemaService_SetCurrentSchemaVersion_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchemaServiceServer).UpdateSchema(ctx, req.(*UpdateSchemaRequest))
+		return srv.(SchemaServiceServer).SetCurrentSchemaVersion(ctx, req.(*SetCurrentSchemaVersionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SchemaService_GetSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetSchemaRequest)
+func _SchemaService_GetSchemaVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSchemaVersionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SchemaServiceServer).GetSchema(ctx, in)
+		return srv.(SchemaServiceServer).GetSchemaVersion(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SchemaService_GetSchema_FullMethodName,
+		FullMethod: SchemaService_GetSchemaVersion_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchemaServiceServer).GetSchema(ctx, req.(*GetSchemaRequest))
+		return srv.(SchemaServiceServer).GetSchemaVersion(ctx, req.(*GetSchemaVersionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SchemaService_ListSchemas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListSchemasRequest)
+func _SchemaService_ListSchemaTypes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSchemaTypesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SchemaServiceServer).ListSchemas(ctx, in)
+		return srv.(SchemaServiceServer).ListSchemaTypes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SchemaService_ListSchemas_FullMethodName,
+		FullMethod: SchemaService_ListSchemaTypes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchemaServiceServer).ListSchemas(ctx, req.(*ListSchemasRequest))
+		return srv.(SchemaServiceServer).ListSchemaTypes(ctx, req.(*ListSchemaTypesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -280,20 +292,20 @@ var SchemaService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*SchemaServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "RegisterSchema",
-			Handler:    _SchemaService_RegisterSchema_Handler,
+			MethodName: "RegisterSchemaVersion",
+			Handler:    _SchemaService_RegisterSchemaVersion_Handler,
 		},
 		{
-			MethodName: "UpdateSchema",
-			Handler:    _SchemaService_UpdateSchema_Handler,
+			MethodName: "SetCurrentSchemaVersion",
+			Handler:    _SchemaService_SetCurrentSchemaVersion_Handler,
 		},
 		{
-			MethodName: "GetSchema",
-			Handler:    _SchemaService_GetSchema_Handler,
+			MethodName: "GetSchemaVersion",
+			Handler:    _SchemaService_GetSchemaVersion_Handler,
 		},
 		{
-			MethodName: "ListSchemas",
-			Handler:    _SchemaService_ListSchemas_Handler,
+			MethodName: "ListSchemaTypes",
+			Handler:    _SchemaService_ListSchemaTypes_Handler,
 		},
 		{
 			MethodName: "ListSchemaVersions",

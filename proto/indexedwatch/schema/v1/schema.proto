@@ -4,35 +4,41 @@ package indexedwatch.schema.v1;
 
 import "google/protobuf/field_mask.proto";
 
-// SchemaService manages resource type schemas.
+// SchemaService manages schema versions for resource types.
 // Schemas define the structure of resources including primary key,
 // secondary indexes, and field definitions.
+//
+// Workflow:
+// 1. RegisterSchemaVersion to create a new version (creates type if new)
+// 2. SetCurrentSchemaVersion to activate a version for writes
+// 3. Rollback by SetCurrentSchemaVersion to a previous version
 service SchemaService {
-  // RegisterSchema creates a new schema for a resource type.
-  // The first version becomes the current (active) schema.
-  // This also provisions backend resources: WAL, State Machine, and LSMs
-  // for each secondary index defined in the schema.
-  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+  // RegisterSchemaVersion creates a new schema version.
+  // If the type doesn't exist, it is created.
+  // Does NOT automatically set as current - use SetCurrentSchemaVersion.
+  // This also provisions backend resources on first version:
+  // WAL, State Machine, and LSMs for each secondary index.
+  rpc RegisterSchemaVersion(RegisterSchemaVersionRequest) returns (RegisterSchemaVersionResponse);
 
-  // UpdateSchema adds a new version of an existing schema.
-  // The new version becomes the current schema for new writes.
-  // Must follow schema evolution rules (see docs).
-  // Adding new secondary indexes will create additional LSMs.
-  rpc UpdateSchema(UpdateSchemaRequest) returns (UpdateSchemaResponse);
+  // SetCurrentSchemaVersion sets which version is the current (active) version.
+  // All new writes are validated against the current version.
+  // Use this to activate a new version or rollback to a previous one.
+  rpc SetCurrentSchemaVersion(SetCurrentSchemaVersionRequest) returns (SetCurrentSchemaVersionResponse);
 
-  // GetSchema retrieves a specific schema by type and version.
-  // If version is empty, returns the current schema.
-  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+  // GetSchemaVersion retrieves a specific schema version.
+  // If version is empty, returns the current version.
+  rpc GetSchemaVersion(GetSchemaVersionRequest) returns (GetSchemaVersionResponse);
 
-  // ListSchemas returns all schemas, optionally filtered by type.
-  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
+  // ListSchemaTypes returns all schema types.
+  // Returns the current version of each type by default.
+  rpc ListSchemaTypes(ListSchemaTypesRequest) returns (ListSchemaTypesResponse);
 
   // ListSchemaVersions returns all versions of a schema type.
   rpc ListSchemaVersions(ListSchemaVersionsRequest) returns (ListSchemaVersionsResponse);
 }
 
-// RegisterSchemaRequest creates a new schema type.
-message RegisterSchemaRequest {
+// RegisterSchemaVersionRequest creates a new schema version.
+message RegisterSchemaVersionRequest {
   // The schema definition as a JSON string.
   // Using JSON allows schemas to be version-controlled and deployed via CI/CD.
   //
@@ -50,31 +56,35 @@ message RegisterSchemaRequest {
   // }
   //
   // Secondary indexes support dot notation for nested fields (e.g., "metadata.region").
+  // Type and version are parsed from the JSON - no separate fields needed.
   string schema_json = 1;
 }
 
-message RegisterSchemaResponse {
-  // The registered schema with server-assigned metadata.
-  Schema schema = 1;
+message RegisterSchemaVersionResponse {
+  // The registered schema version with server-assigned metadata.
+  SchemaVersion schema_version = 1;
 }
 
-// UpdateSchemaRequest adds a new version to an existing schema type.
-message UpdateSchemaRequest {
-  // The schema type to update. Must already exist.
+// SetCurrentSchemaVersionRequest sets the active version for a type.
+message SetCurrentSchemaVersionRequest {
+  // The schema type. Required.
   string type = 1;
 
-  // The new schema definition as JSON string. Version must be unique for this type.
-  // See RegisterSchemaRequest for JSON format documentation.
-  string schema_json = 2;
+  // The version to set as current. Required.
+  // Must be a previously registered version.
+  string version = 2;
 }
 
-message UpdateSchemaResponse {
-  // The updated schema with server-assigned metadata.
-  Schema schema = 1;
+message SetCurrentSchemaVersionResponse {
+  // The schema version that is now current.
+  SchemaVersion schema_version = 1;
+
+  // The previous current version (for audit/logging).
+  string previous_version = 2;
 }
 
-// GetSchemaRequest retrieves a schema by type and optional version.
-message GetSchemaRequest {
+// GetSchemaVersionRequest retrieves a schema version.
+message GetSchemaVersionRequest {
   // The schema type to retrieve. Required.
   string type = 1;
 
@@ -86,31 +96,28 @@ message GetSchemaRequest {
   google.protobuf.FieldMask field_mask = 3;
 }
 
-message GetSchemaResponse {
-  Schema schema = 1;
+message GetSchemaVersionResponse {
+  SchemaVersion schema_version = 1;
 }
 
-// ListSchemasRequest lists schemas with optional filtering.
-message ListSchemasRequest {
-  // If set, only return schemas for this type (all versions).
-  // If empty, returns the current version of each type.
-  string type = 1;
-
-  // Maximum number of schemas to return. Default is 100, max is 1000.
-  int32 page_size = 2;
+// ListSchemaTypesRequest lists all schema types.
+message ListSchemaTypesRequest {
+  // Maximum number of types to return. Default is 100, max is 1000.
+  int32 page_size = 1;
 
   // Token for pagination. Empty for first page.
   // Use next_page_token from previous response.
-  string page_token = 3;
+  string page_token = 2;
 }
 
-message ListSchemasResponse {
-  repeated Schema schemas = 1;
+message ListSchemaTypesResponse {
+  // The current version of each schema type.
+  repeated SchemaVersion schema_versions = 1;
 
   // Token for next page. Empty if no more results.
   string next_page_token = 2;
 
-  // Total count of schemas matching the filter (across all pages).
+  // Total count of schema types (across all pages).
   int32 total_count = 3;
 }
 
@@ -128,7 +135,7 @@ message ListSchemaVersionsRequest {
 
 message ListSchemaVersionsResponse {
   // All versions of the schema, ordered by registration time.
-  repeated Schema schemas = 1;
+  repeated SchemaVersion schema_versions = 1;
 
   // The current (active) version.
   string current_version = 2;
@@ -140,9 +147,9 @@ message ListSchemaVersionsResponse {
   int32 total_count = 4;
 }
 
-// Schema defines the structure of a resource type.
+// SchemaVersion defines a specific version of a schema type.
 // This message is returned by the server; clients submit schema_json.
-message Schema {
+message SchemaVersion {
   // Unique identifier for this resource type. Immutable after creation.
   // Examples: "events", "users", "orders"
   string type = 1;
@@ -166,7 +173,7 @@ message Schema {
   map<string, FieldDefinition> fields = 5;
 
   // Server-assigned metadata (read-only).
-  SchemaMetadata metadata = 6;
+  SchemaVersionMetadata metadata = 6;
 }
 
 // FieldDefinition describes a single field in the schema.
@@ -217,8 +224,8 @@ enum FieldType {
   FIELD_TYPE_ARRAY = 8;
 }
 
-// SchemaMetadata contains server-assigned metadata.
-message SchemaMetadata {
+// SchemaVersionMetadata contains server-assigned metadata.
+message SchemaVersionMetadata {
   // When this schema version was registered.
   // RFC 3339 format.
   string created_at = 1;

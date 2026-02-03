@@ -2,7 +2,7 @@
 
 ## Summary
 
-Defines the gRPC service for schema management, including protobuf message definitions and service methods.
+Defines the gRPC service for schema version management, including protobuf message definitions and service methods.
 
 ## What's Included
 
@@ -21,7 +21,27 @@ Following API versioning best practices:
 - Allows breaking changes in `v2` without affecting existing clients
 - Matches buf.build conventions
 
-### 2. Schema as JSON String (GitOps-friendly)
+### 2. Consistent "SchemaVersion" Naming
+
+All RPCs use consistent "SchemaVersion" terminology:
+- `RegisterSchemaVersion` - creates a new version (creates type if new)
+- `SetCurrentSchemaVersion` - explicitly activates a version
+- `GetSchemaVersion` - retrieves a specific version
+- `ListSchemaTypes` - lists all types (current version of each)
+- `ListSchemaVersions` - lists all versions of a type
+
+This avoids confusion between "Schema" and "Version" concepts.
+
+### 3. Explicit Version Activation (No Auto-Current)
+
+`RegisterSchemaVersion` does NOT automatically set the new version as current.
+This enables safe production workflows:
+- Register a new version
+- Test/validate in staging
+- Explicitly activate via `SetCurrentSchemaVersion`
+- Rollback by setting current to a previous version
+
+### 4. Schema as JSON String (GitOps-friendly)
 
 Clients submit schemas as JSON strings rather than proto messages:
 ```json
@@ -42,9 +62,9 @@ Benefits:
 - Schemas can be version-controlled as JSON files
 - CI/CD pipelines can lint, diff, and apply schemas
 - No proto compilation required for schema authors
-- Language-agnostic tooling
+- Type and version are in the JSON - no redundant request fields
 
-### 3. Nested Field Indexing (Dot Notation)
+### 5. Nested Field Indexing (Dot Notation)
 
 Secondary indexes support nested fields using dot notation:
 - `"user_id"` - top-level field
@@ -53,14 +73,14 @@ Secondary indexes support nested fields using dot notation:
 
 This enables flexible querying on JSON document structures.
 
-### 4. Backend Resource Provisioning
+### 6. Backend Resource Provisioning
 
-RegisterSchema comment explicitly documents that backend resources are created:
+`RegisterSchemaVersion` comment documents that backend resources are created on first version:
 - WAL for the new type
 - State Machine for snapshot/PK lookups
 - LSMs for each secondary index
 
-### 5. Pagination Support
+### 7. Pagination Support
 
 List APIs include pagination for scalability:
 - `page_size` - max results per page (default 100, max 1000)
@@ -68,24 +88,46 @@ List APIs include pagination for scalability:
 - `next_page_token` - returned in response
 - `total_count` - total matching items across all pages
 
-### 6. Field Mask Support
+### 8. Field Mask Support
 
-GetSchemaRequest includes optional `google.protobuf.FieldMask` for partial responses:
+`GetSchemaVersionRequest` includes optional `google.protobuf.FieldMask` for partial responses:
 - Reduces payload size for clients that only need specific fields
 - Standard proto pattern for selective retrieval
 
-### 7. Field Types
+### 9. Field Types
 
 Supported types chosen for:
 - **Indexability**: STRING, INT64, DOUBLE, BOOL, TIMESTAMP can be secondary index keys
 - **Flexibility**: OBJECT (with nested indexing via dot notation), ARRAY for complex data
 - **Timestamps**: RFC 3339 string format for human readability
 
-### 8. Evolution Rules Encoded in Proto
+### 10. Evolution Rules Encoded in Proto
 
 `SchemaEvolutionError` and `EvolutionViolation` make evolution rules explicit:
 - Clients get structured errors, not just strings
 - Documentation is in the API contract
+
+## API Overview
+
+```protobuf
+service SchemaService {
+  // Creates a schema version. Creates type if new.
+  // Does NOT auto-set as current.
+  rpc RegisterSchemaVersion(RegisterSchemaVersionRequest) returns (RegisterSchemaVersionResponse);
+
+  // Explicitly sets the current version. Enables rollback.
+  rpc SetCurrentSchemaVersion(SetCurrentSchemaVersionRequest) returns (SetCurrentSchemaVersionResponse);
+
+  // Retrieves a version (defaults to current if version omitted).
+  rpc GetSchemaVersion(GetSchemaVersionRequest) returns (GetSchemaVersionResponse);
+
+  // Lists all types (current version of each).
+  rpc ListSchemaTypes(ListSchemaTypesRequest) returns (ListSchemaTypesResponse);
+
+  // Lists all versions of a type.
+  rpc ListSchemaVersions(ListSchemaVersionsRequest) returns (ListSchemaVersionsResponse);
+}
+```
 
 ## Reference Code
 
@@ -111,7 +153,8 @@ N/A for proto definitions. Implementation PRs will address:
    - Remote plugins avoid local protoc installation
 
 3. **gRPC API design**:
-   - Separate Get (single) from List (multiple)
+   - Consistent naming (SchemaVersion throughout)
+   - Explicit state transitions (SetCurrentSchemaVersion)
    - Use request/response wrappers for extensibility
    - Include metadata for server-assigned fields
    - Always include pagination for list APIs
@@ -119,6 +162,7 @@ N/A for proto definitions. Implementation PRs will address:
 4. **GitOps-friendly API**:
    - Accept JSON strings for human-authored content
    - Return structured proto messages for programmatic access
+   - Parse type/version from JSON to avoid redundancy
 
 ## Testing
 
@@ -140,10 +184,14 @@ go build ./...
 | go_package mismatch with managed mode | Removed explicit option, let buf handle it |
 | Support nested fields for secondary index | Added dot notation support, documented in comments |
 | Mention WAL/LSMs in RegisterSchema comment | Updated comment to mention backend resources |
-| Use proto FieldMask | Added field_mask to GetSchemaRequest |
-| Add pagination to ListSchemas | Added page_size, page_token, next_page_token, total_count |
-| Add pagination to ListSchemaVersions | Added page_size, page_token, next_page_token, total_count |
+| Use proto FieldMask | Added field_mask to GetSchemaVersionRequest |
+| Add pagination to ListSchemas | Added pagination to ListSchemaTypes |
+| Add pagination to ListSchemaVersions | Added pagination fields |
 | Schema as JSON instead of proto | Changed to schema_json string input |
+| Naming inconsistency (Schema vs Version) | Renamed all RPCs to use "SchemaVersion" consistently |
+| Type redundant in UpdateSchema | Removed UpdateSchema; type is in JSON |
+| Auto-current version is wrong | Added SetCurrentSchemaVersion for explicit activation |
+| ListSchemas unclear semantics | Renamed to ListSchemaTypes (lists types, not versions) |
 
 ## Files Changed
 
