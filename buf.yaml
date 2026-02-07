@@ -4,7 +4,7 @@ version: v2
 
 modules:
   - path: proto
-    name: buf.build/subramanian/indexedwatch
+    name: buf.build/subganapathy/indexedwatch
 
 lint:
   use:
