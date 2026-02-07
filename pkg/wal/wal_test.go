@@ -954,6 +954,20 @@ func TestDataTypeFiltering(t *testing.T) {
 	}
 }
 
+func TestSaveSnapshot_NilReturnsError(t *testing.T) {
+	dir := t.TempDir()
+
+	w, err := Open(dir, DefaultOptions())
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer w.Close()
+
+	if err := w.SaveSnapshot(nil); err == nil {
+		t.Error("SaveSnapshot(nil) should return an error")
+	}
+}
+
 // --- Benchmarks ---
 
 func BenchmarkWAL_Append(b *testing.B) {

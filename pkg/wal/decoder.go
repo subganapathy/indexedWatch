@@ -94,7 +94,7 @@ func (d *Decoder) Decode(rec *walpb.Record) error {
 			if d.isTornEntry(data) {
 				return io.ErrUnexpectedEOF
 			}
-			return fmt.Errorf("%w: expected %08x, got %08x", ErrCRCMismatch, d.crc.Sum32(), rec.Crc)
+			return fmt.Errorf("%w: stored %08x, computed %08x", ErrCRCMismatch, rec.Crc, d.crc.Sum32())
 		}
 	}
 

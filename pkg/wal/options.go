@@ -1,25 +1,29 @@
 package wal
 
-// SyncPolicy controls when fsync happens.
+// SyncPolicy controls when Sync (fdatasync) happens relative to Append.
+// Both policies use the same group commit mechanism under the hood:
+// concurrent Sync() callers share a single fdatasync via leader-follower.
 type SyncPolicy int
 
 const (
-	// SyncOnAppend fsyncs after each Append (safe, slow).
+	// SyncOnAppend calls Sync() automatically after each Append.
+	// Safe but slower — every Append pays the fdatasync cost.
 	// Use for schemas where writes are rare but durability is critical.
 	SyncOnAppend SyncPolicy = iota
 
-	// SyncManual requires the caller to call Sync() explicitly.
-	// Concurrent Sync() callers share a single fdatasync via group commit
-	// (leader-follower pattern). Use for resources where multiple Puts
-	// are batched — each goroutine calls Append then Sync, and the group
-	// commit mechanism coalesces their fsyncs.
+	// SyncManual requires the caller to call Sync() explicitly after
+	// one or more Appends. Multiple goroutines calling Append+Sync
+	// concurrently share a single fdatasync via group commit.
+	// Use for resources where multiple Puts are batched.
 	SyncManual
 )
 
 // Options configures WAL behavior.
 type Options struct {
-	// SegmentSize is the maximum size per WAL file in bytes.
-	// When the current segment exceeds this size, a new segment is created.
+	// SegmentSize is the rotation threshold per WAL segment in bytes.
+	// When the current segment's offset reaches this threshold, a new
+	// segment is created on the next Append. Individual records may cause
+	// the segment to slightly exceed this size.
 	// Set to 0 to disable rotation (single file mode).
 	// Default: 0 (no rotation)
 	SegmentSize int64

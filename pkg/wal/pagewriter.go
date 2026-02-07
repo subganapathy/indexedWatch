@@ -116,7 +116,3 @@ func (pw *PageWriter) Flush() error {
 	return err
 }
 
-// Buffered returns the number of bytes currently buffered.
-func (pw *PageWriter) Buffered() int {
-	return pw.bufferedBytes
-}
