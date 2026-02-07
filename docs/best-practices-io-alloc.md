@@ -84,7 +84,7 @@ Append(rec3) → encode into buffer         ← ~60ns
 Sync()       → flush buffer + fdatasync   ← ~1ms (amortized over 3 records)
 ```
 
-For `SyncOnAppend`, each Append pays the sync cost individually. For `SyncManual` with group commit, N goroutines calling Sync() share one fdatasync via leader-follower:
+The caller controls when to sync. For single-writer schemas, call `Sync()` after each `Append()`. For high-throughput resource writes, N goroutines calling `Sync()` share one fdatasync via group commit (leader-follower):
 
 ```
 G1: Append → Sync() ──┐

@@ -26,11 +26,8 @@ const (
 // Append, and the WAL wraps them as DataType records with chained CRC.
 // WAL-level record types (CrcType, SnapshotType) are written internally.
 //
-// Sync always goes through the group commit mechanism (syncGroup),
-// regardless of SyncPolicy. SyncOnAppend calls Sync() automatically
-// after each Append; SyncManual requires the caller to call Sync()
-// explicitly. Both policies benefit from group commit when multiple
-// goroutines sync concurrently.
+// Append only encodes into the buffer; call Sync() to flush and fsync.
+// Concurrent Sync() callers share a single fdatasync via group commit.
 type WAL struct {
 	dir  string
 	opts Options
@@ -92,11 +89,7 @@ func Open(dir string, opts Options) (*WAL, error) {
 
 // Append writes opaque data to the WAL as a DataType record.
 // The WAL owns the Record envelope — CRC is set by the encoder's chain.
-//
-// The lock is released after encoding so that Sync() (called automatically
-// for SyncOnAppend, or explicitly for SyncManual) goes through the unified
-// group commit path. This allows concurrent Appends to proceed while
-// a sync is in flight.
+// The record is buffered; call Sync() to flush and fsync to disk.
 func (w *WAL) Append(data []byte) (uint64, error) {
 	w.mu.Lock()
 
@@ -132,12 +125,6 @@ func (w *WAL) Append(data []byte) (uint64, error) {
 
 	w.offset = w.encoder.Offset()
 	w.mu.Unlock()
-
-	if w.opts.SyncPolicy == SyncOnAppend {
-		if err := w.Sync(); err != nil {
-			return 0, err
-		}
-	}
 
 	return uint64(offset), nil
 }

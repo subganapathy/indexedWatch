@@ -241,11 +241,10 @@ func TestWAL_Recovery(t *testing.T) {
 	}
 }
 
-func TestWAL_SyncOnAppend(t *testing.T) {
+func TestWAL_AppendThenSync(t *testing.T) {
 	dir := t.TempDir()
 
 	opts := Options{
-		SyncPolicy: SyncOnAppend,
 		BufferSize: 4096,
 	}
 
@@ -255,8 +254,12 @@ func TestWAL_SyncOnAppend(t *testing.T) {
 	}
 	defer w.Close()
 
-	if _, err := w.Append([]byte("sync on append")); err != nil {
+	if _, err := w.Append([]byte("append then sync")); err != nil {
 		t.Fatalf("Append failed: %v", err)
+	}
+
+	if err := w.Sync(); err != nil {
+		t.Fatalf("Sync failed: %v", err)
 	}
 
 	segments, err := w.listSegments()
@@ -273,7 +276,7 @@ func TestWAL_SyncOnAppend(t *testing.T) {
 	}
 
 	if fi.Size() == 0 {
-		t.Error("File size is 0 after SyncOnAppend")
+		t.Error("File size is 0 after Append+Sync")
 	}
 }
 
@@ -281,7 +284,6 @@ func TestWAL_ManualSync(t *testing.T) {
 	dir := t.TempDir()
 
 	opts := Options{
-		SyncPolicy: SyncManual,
 		BufferSize: 128 * 1024,
 	}
 
@@ -319,7 +321,6 @@ func TestWAL_Rotation(t *testing.T) {
 
 	opts := Options{
 		SegmentSize: 100,
-		SyncPolicy:  SyncOnAppend,
 		BufferSize:  32,
 	}
 
@@ -335,6 +336,9 @@ func TestWAL_Rotation(t *testing.T) {
 		allPayloads = append(allPayloads, data)
 		if _, err := w.Append(data); err != nil {
 			t.Fatalf("Append %d failed: %v", i, err)
+		}
+		if err := w.Sync(); err != nil {
+			t.Fatalf("Sync %d failed: %v", i, err)
 		}
 	}
 
@@ -368,7 +372,6 @@ func TestWAL_NoRotation(t *testing.T) {
 
 	opts := Options{
 		SegmentSize: 0,
-		SyncPolicy:  SyncOnAppend,
 	}
 
 	w, err := Open(dir, opts)
@@ -512,8 +515,8 @@ func TestSchemaOptions(t *testing.T) {
 	if opts.SegmentSize != 0 {
 		t.Errorf("SchemaOptions SegmentSize: got %d, want 0", opts.SegmentSize)
 	}
-	if opts.SyncPolicy != SyncOnAppend {
-		t.Errorf("SchemaOptions SyncPolicy: got %v, want SyncOnAppend", opts.SyncPolicy)
+	if opts.BufferSize != 4*1024 {
+		t.Errorf("SchemaOptions BufferSize: got %d, want %d", opts.BufferSize, 4*1024)
 	}
 }
 
@@ -522,8 +525,8 @@ func TestResourceOptions(t *testing.T) {
 	if opts.SegmentSize != 64*1024*1024 {
 		t.Errorf("ResourceOptions SegmentSize: got %d, want %d", opts.SegmentSize, 64*1024*1024)
 	}
-	if opts.SyncPolicy != SyncManual {
-		t.Errorf("ResourceOptions SyncPolicy: got %v, want SyncManual", opts.SyncPolicy)
+	if opts.PreallocSize != 64*1024*1024 {
+		t.Errorf("ResourceOptions PreallocSize: got %d, want %d", opts.PreallocSize, 64*1024*1024)
 	}
 }
 
@@ -563,7 +566,6 @@ func TestWAL_Preallocation(t *testing.T) {
 	dir := t.TempDir()
 
 	opts := Options{
-		SyncPolicy:   SyncOnAppend,
 		PreallocSize: 1024 * 1024,
 	}
 
@@ -684,7 +686,6 @@ func TestCRCCheckpoint_SegmentBoundary(t *testing.T) {
 	// Use small segments to force rotation.
 	opts := Options{
 		SegmentSize: 64,
-		SyncPolicy:  SyncOnAppend,
 		BufferSize:  32,
 	}
 
@@ -867,7 +868,6 @@ func TestGroupCommit(t *testing.T) {
 	dir := t.TempDir()
 
 	opts := Options{
-		SyncPolicy: SyncManual,
 		BufferSize: 128 * 1024,
 	}
 
@@ -974,7 +974,6 @@ func BenchmarkWAL_Append(b *testing.B) {
 	dir := b.TempDir()
 
 	opts := Options{
-		SyncPolicy: SyncManual,
 		BufferSize: 128 * 1024,
 	}
 
