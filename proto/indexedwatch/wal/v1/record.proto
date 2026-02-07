@@ -1,0 +1,19 @@
+syntax = "proto3";
+package indexedwatch.wal.v1;
+
+option go_package = "github.com/subganapathy/indexedwatch/gen/go/indexedwatch/wal/v1;walv1";
+
+// Record is the WAL envelope. Every entry persisted to the WAL is wrapped
+// in this message. The WAL never interprets data — it is opaque.
+message Record {
+  int64  type = 1;
+  uint32 crc  = 2;
+  bytes  data = 3;
+}
+
+// Snapshot is a WAL marker pointing to an external snapshot.
+// It stores the WAL offset at which the snapshot was taken.
+// The actual snapshot data (e.g., LSM SSTables) lives outside the WAL.
+message Snapshot {
+  uint64 offset = 1;
+}

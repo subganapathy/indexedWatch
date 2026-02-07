@@ -2,12 +2,12 @@
 
 ## Project Vision
 
-A storage engine providing:
+A **learning project** to understand WAL, LSM, and Raft consensus. A storage engine providing:
 - **gRPC API** for schema registration and resource CRUD
 - **K8s-style Watch** semantics (snapshot + deltas, per-type ordering)
-- **Multi-index lookups** (primary key, secondary keys)
+- **Multi-index lookups** (hierarchical primary key, secondary keys)
 - **Strong consistency** option (writer blocks until indexed)
-- **Future**: Raft-based replication for read scaling
+- **Raft-based replication** for durability and read scaling
 
 ---
 
@@ -54,7 +54,9 @@ Inspired by Confluent's "shift-left for data streaming" - validate data quality 
 
 ---
 
-## Production Architecture (Future Vision)
+## Production Architecture (Multi-Replica with Raft)
+
+### Control Plane Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -66,32 +68,49 @@ Inspired by Confluent's "shift-left for data streaming" - validate data quality 
 │  │  - validate     │  │  - rebalance    │  │  - leader election  │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                          Proxy Layer                                 │
-│  - Route writes → Leader                                            │
-│  - Route reads → Replicas (or Leader for strong consistency)        │
-│  - Watch stream fanout                                              │
-│  - Connection pooling                                               │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
+```
+
+### Per-Type Replication (LSM on Every Replica)
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│    Replica 1    │     │    Replica 2    │     │    Replica 3    │
+│    (Leader)     │     │   (Follower)    │     │   (Follower)    │
+├─────────────────┤     ├─────────────────┤     ├─────────────────┤
+│      WAL        │────►│      WAL        │────►│      WAL        │
+│  (Raft log)     │     │  (replicated)   │     │  (replicated)   │
+├─────────────────┤     ├─────────────────┤     ├─────────────────┤
+│   Primary LSM   │     │   Primary LSM   │     │   Primary LSM   │
+│    SK LSMs      │     │    SK LSMs      │     │    SK LSMs      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+   Writes here            Serve reads             Serve reads
+   (leader only)         (linearizable            (stale ok)
+                          needs leader)
+```
+
+This is the standard pattern used by etcd, CockroachDB, and TiKV:
+- **Every replica maintains its own LSM/storage**
+- **Raft replicates WAL entries** to all replicas
+- **Each replica applies WAL** to local LSM independently
+- **Reads can go to any replica** (with consistency trade-offs)
+
+### Multi-Type Deployment
+
+```
         ┌─────────────────────────┼─────────────────────────┐
         ▼                         ▼                         ▼
 ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
 │  Type: events   │       │  Type: users    │       │  Type: orders   │
+│  (3 replicas)   │       │  (3 replicas)   │       │  (3 replicas)   │
 │                 │       │                 │       │                 │
-│  ┌───────────┐  │       │  ┌───────────┐  │       │  ┌───────────┐  │
-│  │  Leader   │  │       │  │  Leader   │  │       │  │  Leader   │  │
-│  │  (WAL)    │──┼─Raft──┼─▶│ Replica 1 │  │       │  │  (WAL)    │  │
-│  └───────────┘  │       │  │ Replica 2 │  │       │  └───────────┘  │
-│       │         │       │  └───────────┘  │       │       │         │
-│       ▼         │       │                 │       │       ▼         │
-│  SM + LSMs      │       │                 │       │  SM + LSMs      │
+│  Leader ──Raft──│       │  Leader ──Raft──│       │  Leader ──Raft──│
+│    │            │       │    │            │       │    │            │
+│    ▼            │       │    ▼            │       │    ▼            │
+│  Primary LSM    │       │  Primary LSM    │       │  Primary LSM    │
+│  SK LSMs        │       │  SK LSMs        │       │  SK LSMs        │
 └─────────────────┘       └─────────────────┘       └─────────────────┘
 
-Leader: Handles writes, replicates via Raft
-Replicas: Serve reads, watch streams
 Per-type: Independent scaling, failure isolation
 ```
 
@@ -121,19 +140,26 @@ Per-type: Independent scaling, failure isolation
 
   /types/
     /events/                        # Per-type storage (independent)
-      wal_index                     # Maps seqNum ranges → files
-      000001.wal
-      000002.wal
-      snapshot/                     # State Machine checkpoint
-      lsms/
+      wal/                          # WAL directory
+        wal_index                   # Maps seqNum ranges → files
+        000001.wal
+        000002.wal
+      primary/                      # Primary LSM (pk → record)
+        MANIFEST
+        000001.sst
+        000002.sst
+      indexes/
         user_id/                    # SK LSM
         timestamp/                  # SK LSM
 
     /users/                         # Another type (independent)
-      wal_index
-      000001.wal
-      snapshot/
-      lsms/
+      wal/
+        wal_index
+        000001.wal
+      primary/
+        MANIFEST
+        000001.sst
+      indexes/
         email/
         org_id/
 ```
@@ -148,7 +174,7 @@ Per-type: Independent scaling, failure isolation
 │  SchemaService: Register/Update schemas                                     │
 │  ResourceService: Create/Update/Delete resources                            │
 │  WatchService: Snapshot + Stream deltas (per-type)                          │
-│  QueryService: Get by PK, List by SK                                        │
+│  QueryService: Get by PK, List by SK, Range queries                         │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                     ┌───────────────┴───────────────┐
@@ -160,19 +186,61 @@ Per-type: Independent scaling, failure isolation
 │  ┌─────────────────────────────┐  │ │  ┌─────────────────────────────────┐  │
 │  │ Schema WAL                  │  │ │  │ Type: "events"                  │  │
 │  │ seqNum → schema definition  │  │ │  │                                 │  │
-│  └─────────────────────────────┘  │ │  │  WAL ──→ State Machine          │  │
+│  └─────────────────────────────┘  │ │  │  WAL ──→ Primary LSM            │  │
 │              │                    │ │  │   │      (pk → record)          │  │
-│              ▼                    │ │  │   │                             │  │
-│  ┌─────────────────────────────┐  │ │  │   └──→ SK LSMs                  │  │
-│  │ Materialized Registry       │  │ │  │        (sk,pk) → seqNum        │  │
-│  │ (type, version) → schema    │  │ │  └─────────────────────────────────┘  │
-│  └─────────────────────────────┘  │ │                                       │
-└───────────────────────────────────┘ │  ┌─────────────────────────────────┐  │
+│              ▼                    │ │  │   │      = State Machine        │  │
+│  ┌─────────────────────────────┐  │ │  │   │                             │  │
+│  │ Materialized Registry       │  │ │  │   └──→ SK LSMs                  │  │
+│  │ (type, version) → schema    │  │ │  │        (sk,pk) → seqNum        │  │
+│  └─────────────────────────────┘  │ │  └─────────────────────────────────┘  │
+└───────────────────────────────────┘ │                                       │
+                                      │  ┌─────────────────────────────────┐  │
                                       │  │ Type: "users"                   │  │
                                       │  │  (same structure)               │  │
                                       │  └─────────────────────────────────┘  │
                                       └───────────────────────────────────────┘
 ```
+
+### Key Insight: Primary LSM IS the State Machine
+
+The Primary LSM serves as the **disk-backed, scalable state machine**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              Primary LSM = State Machine                         │
+│  (disk-backed, scalable, IS the source of truth)                │
+│                                                                  │
+│  Key:   hierarchical pk (e.g., "/namespaces/default/pods/nginx")│
+│  Value: {                                                        │
+│      data:         []byte,      // actual record                │
+│      createSeqNum: uint64,                                       │
+│      updateSeqNum: uint64,                                       │
+│  }                                                               │
+│                                                                  │
+│  Used for:                                                       │
+│    • Uniqueness checks (bloom filters = fast "not exists")      │
+│    • Point lookups by PK                                        │
+│    • Range queries (hierarchical PKs enable prefix scans)       │
+│    • Watch snapshots (point-in-time reads at seqNum)            │
+│    • Optimistic concurrency (check updateSeqNum)                │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      Secondary LSMs                              │
+│  Key:   (sk_value, pk)                                          │
+│  Value: seqNum                                                   │
+│                                                                  │
+│  Used for:                                                       │
+│    • Query by secondary key                                      │
+│    • Get PKs, then fetch from Primary LSM for actual values     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why disk-backed instead of in-memory?**
+- Scales beyond RAM limits
+- Bloom filters provide fast "not exists" checks for admission
+- LSM snapshots enable consistent point-in-time reads
+- Standard pattern used by etcd, CockroachDB, TiKV
 
 ### Per-Type Independence
 
@@ -300,9 +368,9 @@ Note: `schemaVersion` is the version name (e.g., "v2"), not a seqNum. This decou
 ```go
 func (w *WAL) PrunableSeqNum() uint64 {
     return min(
-        w.snapshot.LastAppliedSeqNum(),
-        w.skLSMs["user_id"].MinUnflushedSeqNum(),
-        w.skLSMs["timestamp"].MinUnflushedSeqNum(),
+        w.primaryLSM.LastAppliedSeqNum(),    // Primary LSM
+        w.skLSMs["user_id"].LastAppliedSeqNum(),
+        w.skLSMs["timestamp"].LastAppliedSeqNum(),
         // ... all SK LSMs
     )
 }
@@ -321,239 +389,118 @@ func (w *WAL) PruneFiles() {
 **Key insight**: No consumer tracking for watch clients. Clients own their offset. If their offset is pruned, they re-snapshot.
 
 ### Consumers of WAL
-1. **State Machine Builder**: Applies ops to in-memory KV (handles PK lookups + OCC)
+1. **Primary LSM**: Applies ops to disk-backed state (handles PK lookups, range queries, OCC)
 2. **SK LSM Builders**: Updates (sk, pk) → seqNum indexes
 3. **Stream API**: Serves deltas to watch clients (reads directly from WAL files)
 
 ---
 
-## State Machine (MVCC Snapshot Store)
+## Primary LSM as State Machine
 
 ### Purpose
-The State Machine serves four purposes:
-1. **Snapshot serving**: Provides current state for Watch API
-2. **OCC checks**: Record includes `UpdateSeqNum` for conflict detection
-3. **Point lookups**: Direct `Get(pk)` for QueryService
-4. **Point-in-time queries**: `GetAt(pk, seqNum)` for consistent SK queries
+The Primary LSM serves as the **disk-backed state machine** with five purposes:
+1. **Uniqueness checks**: Bloom filters for fast "not exists" (admission control)
+2. **Point lookups**: Direct `Get(pk)` for QueryService
+3. **Range queries**: Prefix scans on hierarchical PKs
+4. **Snapshot serving**: Point-in-time reads for Watch API
+5. **OCC checks**: Record includes `UpdateSeqNum` for conflict detection
 
-### Why MVCC?
+### Why Disk-Backed Instead of In-Memory?
 
-Without MVCC, SK queries can be inconsistent:
-```
-Timeline:
-  t1: Write(pk=A, user_id=alice) → seqNum=100
-  t2: SM updated immediately
-  t3: SK LSM still processing seqNum 99...
-  t4: Query "user_id=alice" → misses A (SK LSM lag)
-```
+In-memory state machines don't scale:
+- Limited by RAM
+- Requires complex checkpointing
+- Recovery means replaying entire WAL
 
-With MVCC:
-- SM stores multiple versions per key
-- SK query fetches version at SK LSM's lastAppliedSeqNum
-- Consistent point-in-time view guaranteed
+With disk-backed LSM:
+- Scales to dataset size (not limited by RAM)
+- Bloom filters provide fast "not exists" checks
+- LSM snapshots enable consistent point-in-time reads
+- Standard pattern used by etcd, CockroachDB, TiKV
 
-### Record Format
+### Record Format in Primary LSM
 ```go
-type VersionedRecord struct {
-    SeqNum        uint64                 // WAL seqNum of this version
-    SchemaVersion string                 // e.g., "v2"
-    CreateSeqNum  uint64                 // immutable, set on first create
-    Data          map[string]interface{} // the actual fields
-    IsDeleted     bool                   // tombstone marker
+// Key: hierarchical pk (e.g., "/namespaces/default/pods/nginx")
+// Value:
+type StoredRecord struct {
+    Data          []byte  // actual record (JSON/protobuf)
+    SchemaVersion string  // e.g., "v2"
+    CreateSeqNum  uint64  // immutable, set on first create
+    UpdateSeqNum  uint64  // updated on every write
+    IsDeleted     bool    // tombstone marker
 }
 ```
 
-### MVCC Implementation
-```go
-type StateMachine struct {
-    mu sync.RWMutex
+### Hierarchical Primary Keys
 
-    // pk → versions (sorted by seqNum descending, newest first)
-    versions map[string][]*VersionedRecord
-
-    // Minimum seqNum we must retain for consumers
-    // = min(all SK LSM lastApplied, oldest active snapshot/watch)
-    minRetainedSeqNum uint64
-
-    // Latest seqNum applied
-    lastSeqNum uint64
-}
-
-// Apply adds a new version for the record
-func (sm *StateMachine) Apply(entry *WALEntry) {
-    sm.mu.Lock()
-    defer sm.mu.Unlock()
-
-    var createSeqNum uint64
-    if existing := sm.versions[entry.PK]; len(existing) > 0 {
-        createSeqNum = existing[len(existing)-1].CreateSeqNum
-    } else {
-        createSeqNum = entry.SeqNum
-    }
-
-    record := &VersionedRecord{
-        SeqNum:        entry.SeqNum,
-        SchemaVersion: entry.SchemaVersion,
-        CreateSeqNum:  createSeqNum,
-        Data:          entry.Data,
-        IsDeleted:     entry.Op == DELETE,
-    }
-
-    // Prepend (newest first)
-    sm.versions[entry.PK] = append(
-        []*VersionedRecord{record},
-        sm.versions[entry.PK]...,
-    )
-    sm.lastSeqNum = entry.SeqNum
-}
-
-// GetAt returns the record version at or before the given seqNum
-func (sm *StateMachine) GetAt(pk string, atSeqNum uint64) *VersionedRecord {
-    sm.mu.RLock()
-    defer sm.mu.RUnlock()
-
-    for _, v := range sm.versions[pk] {
-        if v.SeqNum <= atSeqNum {
-            if v.IsDeleted {
-                return nil
-            }
-            return v
-        }
-    }
-    return nil
-}
-
-// GetLatest returns the most recent version
-func (sm *StateMachine) GetLatest(pk string) *VersionedRecord {
-    sm.mu.RLock()
-    defer sm.mu.RUnlock()
-
-    if versions := sm.versions[pk]; len(versions) > 0 {
-        if versions[0].IsDeleted {
-            return nil
-        }
-        return versions[0]
-    }
-    return nil
-}
+PKs are hierarchical (like K8s) to enable range queries:
+```
+/namespaces/default/pods/nginx
+/namespaces/default/pods/redis
+/namespaces/prod/pods/api
+/namespaces/prod/pods/web
 ```
 
-### Garbage Collection
+Range query: "List all pods in namespace `default`"
+→ Prefix scan on `/namespaces/default/pods/`
 
-Old versions are retained until all consumers have processed past them:
+### Write Flow
 
-```go
-func (sm *StateMachine) GC() {
-    sm.mu.Lock()
-    defer sm.mu.Unlock()
+```
+Record A created (pk="/namespaces/default/pods/nginx"):
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. AdmissionChecker: Does pk exist in Primary LSM?              │
+│    └─► Bloom filter says NO → proceed (fast path)               │
+│ 2. Write to WAL → assigned seqNum=1                             │
+│ 3. WAL entry applied to Primary LSM and SK LSMs                 │
+│ 4. API blocks until Primary LSM reflects seqNum=1               │
+│ 5. Return success                                               │
+└─────────────────────────────────────────────────────────────────┘
 
-    minRetained := sm.computeMinRetainedSeqNum()
-
-    for pk, versions := range sm.versions {
-        // Find cutoff: keep versions >= minRetained, plus one older
-        cutoff := len(versions)
-        for i, v := range versions {
-            if v.SeqNum < minRetained {
-                cutoff = i + 1 // Keep this one as floor, remove older
-                break
-            }
-        }
-        if cutoff < len(versions) {
-            sm.versions[pk] = versions[:cutoff]
-        }
-    }
-}
-
-func (sm *StateMachine) computeMinRetainedSeqNum() uint64 {
-    return min(
-        sm.skLSMTracker.MinLastApplied(),  // SK LSMs need old versions
-        sm.snapshotTracker.MinSeqNum(),    // Active snapshots
-        sm.watchTracker.MinSeqNum(),       // Active watch streams
-    )
-}
+Record A updated:
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. AdmissionChecker: Get A's updateSeqNum from Primary LSM      │
+│    └─► Check: client's expectedSeqNum == LSM's updateSeqNum?    │
+│        (optimistic concurrency control)                         │
+│ 2. Write to WAL → assigned seqNum=2                             │
+│ 3. WAL entry applied to Primary LSM and SK LSMs                 │
+│ 4. API blocks until Primary LSM reflects seqNum=2               │
+│ 5. Return success                                               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Memory Overhead
+### LSM Snapshot for Watches
 
-MVCC memory is bounded:
-- GC runs based on `min(consumer progress)`
-- Fast consumers = fewer retained versions
-- Typically 1-3 versions per key in steady state
-- Worst case: slow consumer holds back GC (same as WAL retention)
-
-### Checkpointing
-
-Checkpoint includes all retained versions:
 ```
-/types/events/snapshot/
-  checkpoint_5000.json    # Versions with seqNum >= minRetained at 5000
-  CURRENT -> checkpoint_5000.json
+Watch request starting at seqNum=5:
+
+1. Take LSM snapshot at current seqNum (consistent point-in-time view)
+2. Stream current state to client (initial snapshot)
+3. Subscribe to WAL for seqNum > snapshot's seqNum
+4. Stream deltas as they arrive from WAL
 ```
 
-On restart: Load checkpoint + replay WAL from checkpoint's seqNum.
+### MVCC for SK Query Consistency
 
----
+SK LSMs may lag behind Primary LSM. To ensure consistency:
 
-## Index LSMs (Secondary Keys Only)
-
-### No Separate PK LSM
-
-Primary key operations go directly to State Machine:
-```
-Get(pk):         StateMachine.GetLatest(pk) → record
-GetAt(pk, seq):  StateMachine.GetAt(pk, seq) → record at seqNum
-Exists(pk):      StateMachine.GetLatest(pk) != nil
-OCC check:       StateMachine.GetLatest(pk).SeqNum == expectedSeqNum?
-```
-
-### SK LSM (one per indexed field)
-```
-Key:   (sk_field_value, pk) - composite
-Value: seqNum (uint64)
-
-Purpose:
-- List by field: scan prefix → get candidate pks → fetch versioned record
-- Composite key ensures updates to same record replace old entry
-- seqNum used for:
-  1. Compaction (newer wins)
-  2. MVCC lookup (fetch correct version from State Machine)
-```
-
-### SK LSM Tracks Progress
-```go
-type SKLSM struct {
-    // ... LSM internals ...
-
-    // Last seqNum fully applied to this LSM
-    lastAppliedSeqNum uint64
-}
-```
-
-This is critical for:
-- MVCC queries (query at LSM's lastAppliedSeqNum)
-- GC (SM can't delete versions still needed by lagging LSMs)
-- WAL pruning (WAL files retained until all LSMs have processed them)
-
-### Query Flow with MVCC
 ```go
 func (q *QueryService) ListByField(field, value string) ([]*Record, error) {
-    // 1. Get the seqNum this LSM has processed up to
-    //    This ensures consistent point-in-time view
+    // 1. Get the seqNum this SK LSM has processed up to
     querySeqNum := q.skLSM[field].LastAppliedSeqNum()
 
     // 2. Scan SK LSM for candidates
     candidates := q.skLSM[field].ScanPrefix(value)
 
-    // 3. Fetch versioned records from State Machine
+    // 3. Fetch records from Primary LSM at querySeqNum
     var results []*Record
     for _, candidate := range candidates {
-        // Fetch the version that existed when SK entry was written
-        // This ensures we see the record as it was when indexed
-        record := q.stateMachine.GetAt(candidate.PK, candidate.SeqNum)
-        if record == nil {
-            continue // deleted at that point
+        // Use LSM snapshot at querySeqNum for consistency
+        record := q.primaryLSM.GetAt(candidate.PK, querySeqNum)
+        if record == nil || record.IsDeleted {
+            continue
         }
-        // Re-check: SK value might have changed between writes
+        // Re-check: SK value might have changed
         if record.Data[field] != value {
             continue
         }
@@ -563,11 +510,53 @@ func (q *QueryService) ListByField(field, value string) ([]*Record, error) {
 }
 ```
 
+---
+
+## Index LSMs
+
+### Primary LSM (stores actual records)
+
+Primary key operations go to Primary LSM:
+```
+Get(pk):         PrimaryLSM.Get(pk) → record
+GetAt(pk, seq):  PrimaryLSM.GetAt(pk, seq) → record at seqNum
+Exists(pk):      PrimaryLSM.Get(pk) != nil (bloom filter fast path)
+OCC check:       PrimaryLSM.Get(pk).UpdateSeqNum == expectedSeqNum?
+Range(prefix):   PrimaryLSM.Scan(prefix) → records (hierarchical PKs)
+```
+
+### SK LSM (one per indexed field)
+```
+Key:   (sk_field_value, pk) - composite
+Value: seqNum (uint64)
+
+Purpose:
+- List by field: scan prefix → get candidate pks → fetch from Primary LSM
+- Composite key ensures updates to same record replace old entry
+- seqNum used for:
+  1. Compaction (newer wins)
+  2. MVCC lookup (fetch correct version from Primary LSM)
+```
+
+### All LSMs Track Progress
+```go
+type LSM struct {
+    // ... LSM internals ...
+
+    // Last seqNum fully applied to this LSM
+    lastAppliedSeqNum uint64
+}
+```
+
+This is critical for:
+- MVCC queries (query at LSM's lastAppliedSeqNum)
+- WAL pruning (WAL files retained until all LSMs have processed them)
+
 ### Consistency Guarantee
 
 With MVCC + versioned queries:
 - SK query sees consistent snapshot at `skLSM.lastAppliedSeqNum`
-- No missing records due to SM/LSM lag
+- No missing records due to Primary/SK LSM lag
 - No phantom reads from concurrent writes
 
 The SK LSM is still a **hint** (re-check needed), but MVCC ensures the hint is evaluated against the correct record version.
@@ -590,14 +579,14 @@ type SchemaValidator struct {
     registry *SchemaRegistry
 }
 
-// Rejects Create if PK already exists
+// Rejects Create if PK already exists (uses Primary LSM bloom filter)
 type PKUniquenessChecker struct {
-    stateMachine *StateMachine
+    primaryLSM *LSM
 }
 
 // Rejects Update if expectedSeqNum doesn't match
 type OCCChecker struct {
-    stateMachine *StateMachine
+    primaryLSM *LSM
 }
 
 // Rate limiting, quotas, etc.
@@ -610,7 +599,9 @@ func (s *Server) Write(ctx context.Context, req *WriteRequest) error {
     // 1. Lookup schema
     schema := s.registry.Get(req.Type, req.SchemaVersion)
 
-    // 2. Run admission checkers
+    // 2. Run admission checkers (checks Primary LSM)
+    //    - PKUniquenessChecker uses bloom filter for fast "not exists"
+    //    - OCCChecker reads updateSeqNum from Primary LSM
     checkers := []AdmissionChecker{
         s.schemaValidator,
         s.pkUniquenessChecker,
@@ -635,13 +626,15 @@ func (s *Server) Write(ctx context.Context, req *WriteRequest) error {
         return err
     }
 
-    // 4. Apply to State Machine (synchronous)
-    s.stateMachine.Apply(entry)
-
-    // 5. Queue for SK LSM builders (async or sync based on consistency mode)
+    // 4. WAL entry applied to Primary LSM and SK LSMs
+    //    (can be async with write-ahead guarantee from WAL)
+    s.primaryLSM.Apply(entry)
     s.skBuilder.Enqueue(entry)
 
-    // 6. If strong consistency, wait for SK LSMs
+    // 5. Block until Primary LSM reflects the write
+    s.primaryLSM.WaitForSeqNum(seqNum)
+
+    // 6. If strong consistency, also wait for SK LSMs
     if req.StrongConsistency {
         s.skBuilder.WaitForSeqNum(seqNum)
     }
@@ -658,26 +651,29 @@ func (s *Server) Write(ctx context.Context, req *WriteRequest) error {
 ```
 1. Client: Write(type, op, record, expectedSeqNum?)
 2. Server: Lookup schema from materialized registry
-3. Server: Run AdmissionCheckers (schema validation, PK uniqueness, OCC)
+3. Server: Run AdmissionCheckers against Primary LSM
+   - Schema validation
+   - PK uniqueness (bloom filter fast path)
+   - OCC check (compare updateSeqNum)
 4. Server: Assign seqNum, append to type's WAL
-5. Server: Apply to State Machine (synchronous, in-memory)
-6. Server: Queue for SK LSM builders
-7. Server (strong consistency): Wait for SK LSMs to catch up
+5. Server: Apply to Primary LSM and SK LSMs
+6. Server: Block until Primary LSM reflects the write
+7. Server (strong consistency): Also wait for SK LSMs
 8. Server: Return success with seqNum
 ```
 
 ### OCC (Optimistic Concurrency Control)
 ```
-Record in State Machine:
-  pk: "A"
+Record in Primary LSM:
+  pk: "/namespaces/default/pods/nginx"
   CreateSeqNum: 1000
   UpdateSeqNum: 2500
 
 Client wants to update:
-  Sends: pk="A", expectedSeqNum=2500, newData={...}
+  Sends: pk="/namespaces/default/pods/nginx", expectedSeqNum=2500, newData={...}
 
 OCCChecker:
-  current := StateMachine.Get("A")
+  current := PrimaryLSM.Get(pk)
   if current.UpdateSeqNum != 2500 → CONFLICT error
   else → allow
 ```
@@ -721,8 +717,8 @@ message Delta {
 1. Client: Watch(type="events", from_seq_num=0)
 
 2. Server (from_seq_num=0, needs snapshot):
-   a. Read current state from State Machine
-   b. Note the seqNum at snapshot time
+   a. Take LSM snapshot at current seqNum
+   b. Stream current state from Primary LSM snapshot
    c. Send Snapshot{seq_num=5000, resources=[...]}
    d. Start streaming WAL from seqNum 5001
 
@@ -749,37 +745,46 @@ message Delta {
 
 ## Phased Implementation Plan
 
-### Phase 1: Foundation
-- [ ] Project structure + gRPC service definitions
+### Phase 1: Foundation (Current)
+- [x] Project structure + gRPC service definitions
+- [x] Generic WAL implementation (PR #2)
+  - [x] 8-byte aligned frames
+  - [x] CRC32-C checksums
+  - [x] PageWriter for buffered I/O
+  - [x] Segment rotation
 - [ ] Schema WAL + materialized registry
-- [ ] Basic data WAL (single file per type, append-only)
-- [ ] WAL index
-- [ ] MVCC State Machine (multi-version with GC)
-- [ ] AdmissionChecker interface + implementations
-- [ ] Point lookup via State Machine (GetLatest, GetAt)
-- [ ] OCC via State Machine
+- [ ] WAL extensions: seqNum tracking, TruncateBefore(), ReadFrom()
 
-### Phase 2: Secondary Indexing
-- [ ] SK LSM with composite keys (using Pebble or custom)
+### Phase 2: Primary LSM
+- [ ] Primary LSM implementation (using Pebble or custom)
+  - [ ] Hierarchical PK support
+  - [ ] Bloom filters for fast "not exists"
+  - [ ] Point lookups and range scans
+  - [ ] MVCC snapshots
+- [ ] AdmissionChecker interface + implementations
+- [ ] OCC via Primary LSM
+
+### Phase 3: Secondary Indexing
+- [ ] SK LSM with composite keys
 - [ ] List-by-field queries with re-check
 - [ ] Strong consistency mode (wait for SK LSM)
 
-### Phase 3: Watch API
-- [ ] Snapshot from State Machine
+### Phase 4: Watch API
+- [ ] Snapshot from Primary LSM
 - [ ] Delta streaming from WAL
 - [ ] Client reconnection handling
 - [ ] EXPIRED error when offset pruned
 
-### Phase 4: Persistence & Recovery
-- [ ] State Machine checkpointing
+### Phase 5: Persistence & Recovery
 - [ ] WAL file rotation
-- [ ] WAL pruning based on consumer progress
-- [ ] Startup recovery (checkpoint + WAL replay)
+- [ ] WAL pruning based on consumer progress (all LSMs)
+- [ ] Startup recovery (WAL replay to LSMs)
 
-### Phase 5: Replication (Future)
+### Phase 6: Replication
 - [ ] Raft consensus for Schema WAL
 - [ ] Raft consensus for data WALs
-- [ ] Read replicas
+- [ ] LSM on every replica
+- [ ] Read replicas with consistency options
 
 ---
 
@@ -790,9 +795,11 @@ message Delta {
 | Global vs per-type WAL | Per-type (like K8s) |
 | Schema WAL pruning | Grows forever (changes are rare) |
 | Schema reference in data | Version name, not seqNum |
-| PK LSM needed? | No, State Machine handles PK ops |
+| PK LSM needed? | Yes, Primary LSM = State Machine (disk-backed, scalable) |
 | Cross-type ordering | Not supported, use timestamps if needed |
-| SM/LSM consistency | MVCC in State Machine - query at LSM's lastAppliedSeqNum |
+| SM/LSM consistency | MVCC via LSM snapshots - query at SK LSM's lastAppliedSeqNum |
+| In-memory vs disk state | Disk-backed (Primary LSM) - scales beyond RAM |
+| Multi-replica scaling | LSM on every replica (standard Raft pattern) |
 
 ## Remaining Open Questions
 
@@ -800,7 +807,7 @@ message Delta {
    - JSON: simpler, human-readable, larger
    - Protobuf: smaller, faster, requires schema compilation
 
-2. **SK LSM Implementation**: Use Pebble or build custom?
+2. **LSM Implementation**: Use Pebble or build custom?
    - Pebble: production-ready, but heavy dependency
    - Custom: learning opportunity, full control
 
@@ -814,10 +821,11 @@ message Delta {
 | Per-type data WALs | Sound - matches K8s model |
 | WAL pruning (min of consumers) | Sound - standard pattern |
 | AdmissionChecker interface | Sound - clean separation |
-| MVCC State Machine | Sound - enables consistent point-in-time queries |
-| SK query with MVCC | Sound - query at LSM's seqNum for consistency |
-| Version GC | Sound - bounded by slowest consumer |
+| Primary LSM = State Machine | Sound - disk-backed, scalable, bloom filters for admission |
+| Hierarchical PKs | Sound - enables range queries ("list all in prefix") |
+| SK query with MVCC | Sound - query at SK LSM's seqNum for consistency |
+| LSM on every replica | Sound - standard Raft pattern (etcd, CockroachDB, TiKV) |
 
 ---
 
-*Document updated with MVCC State Machine design*
+*Document updated with Primary LSM = State Machine architecture*
