@@ -23,6 +23,10 @@ const (
 
 // Record is the WAL envelope. Every entry persisted to the WAL is wrapped
 // in this message. The WAL never interprets data — it is opaque.
+//
+// proto3 scalar fields (type, crc) are value types in generated Go code
+// (int64, uint32) — not pointers. Zero is the default, which is why
+// WAL record types start at 1 (iota+1) to avoid ambiguity.
 type Record struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          int64                  `protobuf:"varint,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -86,9 +90,12 @@ func (x *Record) GetData() []byte {
 // Snapshot is a WAL marker pointing to an external snapshot.
 // It stores the WAL offset at which the snapshot was taken.
 // The actual snapshot data (e.g., LSM SSTables) lives outside the WAL.
+// The metadata field carries application-defined context (snapshot ID,
+// file paths, etc.) as opaque bytes.
 type Snapshot struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Offset        uint64                 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
+	Metadata      []byte                 `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -130,6 +137,13 @@ func (x *Snapshot) GetOffset() uint64 {
 	return 0
 }
 
+func (x *Snapshot) GetMetadata() []byte {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 var File_indexedwatch_wal_v1_record_proto protoreflect.FileDescriptor
 
 const file_indexedwatch_wal_v1_record_proto_rawDesc = "" +
@@ -138,9 +152,10 @@ const file_indexedwatch_wal_v1_record_proto_rawDesc = "" +
 	"\x06Record\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\x03R\x04type\x12\x10\n" +
 	"\x03crc\x18\x02 \x01(\rR\x03crc\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\"\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\">\n" +
 	"\bSnapshot\x12\x16\n" +
-	"\x06offset\x18\x01 \x01(\x04R\x06offsetB\xdb\x01\n" +
+	"\x06offset\x18\x01 \x01(\x04R\x06offset\x12\x1a\n" +
+	"\bmetadata\x18\x02 \x01(\fR\bmetadataB\xdb\x01\n" +
 	"\x17com.indexedwatch.wal.v1B\vRecordProtoP\x01ZEgithub.com/subganapathy/indexedwatch/gen/go/indexedwatch/wal/v1;walv1\xa2\x02\x03IWX\xaa\x02\x13Indexedwatch.Wal.V1\xca\x02\x13Indexedwatch\\Wal\\V1\xe2\x02\x1fIndexedwatch\\Wal\\V1\\GPBMetadata\xea\x02\x15Indexedwatch::Wal::V1b\x06proto3"
 
 var (

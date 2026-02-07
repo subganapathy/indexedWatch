@@ -9,7 +9,10 @@ const (
 	SyncOnAppend SyncPolicy = iota
 
 	// SyncManual requires the caller to call Sync() explicitly.
-	// Use for resources where writes are batched.
+	// Concurrent Sync() callers share a single fdatasync via group commit
+	// (leader-follower pattern). Use for resources where multiple Puts
+	// are batched — each goroutine calls Append then Sync, and the group
+	// commit mechanism coalesces their fsyncs.
 	SyncManual
 )
 
@@ -62,9 +65,9 @@ func SchemaOptions() Options {
 
 // ResourceOptions returns options optimized for resource WAL.
 // - 64MB segments with rotation
-// - Manual sync (caller batches)
+// - Manual sync with group commit (multiple Puts share one fdatasync)
 // - Large buffer for throughput
-// - Preallocation for performance
+// - Preallocation for performance and torn write detection
 func ResourceOptions() Options {
 	return Options{
 		SegmentSize:  64 * 1024 * 1024, // 64MB segments

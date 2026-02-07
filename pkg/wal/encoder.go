@@ -140,9 +140,3 @@ func (e *Encoder) Offset() int64 {
 	return e.offset
 }
 
-// Buffered returns the number of bytes currently buffered.
-func (e *Encoder) Buffered() int {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.pw.Buffered()
-}

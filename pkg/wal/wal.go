@@ -16,9 +16,7 @@ import (
 )
 
 const (
-	// walFilePrefix is the prefix for WAL segment files.
 	walFilePrefix = "wal-"
-	// walFileSuffix is the suffix for WAL segment files.
 	walFileSuffix = ".log"
 )
 
@@ -36,16 +34,16 @@ type WAL struct {
 	encoder   *Encoder
 	syncGroup *syncGroup
 
-	// Segment tracking (for rotation).
 	seq    uint64 // Current segment sequence number
 	offset int64  // Current offset in segment
 
 	closed bool
 }
 
+// --- Exported methods ---
+
 // Open opens or creates a WAL in the given directory.
 // If the directory doesn't exist, it will be created.
-// On open, all existing records are read for recovery.
 func Open(dir string, opts Options) (*WAL, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("wal: failed to create directory: %w", err)
@@ -56,35 +54,199 @@ func Open(dir string, opts Options) (*WAL, error) {
 		opts: opts,
 	}
 
-	// Find existing segments.
 	segments, err := w.listSegments()
 	if err != nil {
 		return nil, err
 	}
 
 	if len(segments) == 0 {
-		// No existing segments — create the first one with CRC seed 0.
 		if err := w.createSegment(0, 0); err != nil {
 			return nil, err
 		}
 	} else {
-		// Open the last segment for appending.
 		lastSeg := segments[len(segments)-1]
 		if err := w.openSegment(lastSeg); err != nil {
 			return nil, err
 		}
 	}
 
-	// Set up group commit for SyncManual mode.
-	w.syncGroup = newSyncGroup(w.syncLocked)
+	// syncGroup's syncFunc acquires w.mu internally — required for
+	// correctness so that flush+fsync is atomic w.r.t. Append/rotate.
+	w.syncGroup = newSyncGroup(func() error {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		if w.closed {
+			return ErrClosed
+		}
+		return w.syncLocked()
+	})
 
 	return w, nil
 }
+
+// Append writes opaque data to the WAL as a DataType record.
+// The WAL owns the Record envelope — CRC is set by the encoder's chain.
+// If SyncPolicy is SyncOnAppend, the record is flushed and fsynced before returning.
+func (w *WAL) Append(data []byte) (uint64, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return 0, ErrClosed
+	}
+
+	if w.opts.SegmentSize > 0 && w.offset >= w.opts.SegmentSize {
+		if err := w.rotate(); err != nil {
+			return 0, err
+		}
+	}
+
+	rec := &walpb.Record{
+		Type: walpb.DataType,
+		Data: data,
+	}
+
+	offset, err := w.encoder.Encode(rec)
+	if err != nil {
+		return 0, fmt.Errorf("wal: failed to encode: %w", err)
+	}
+
+	// Encoder sets rec.Crc via the CRC chain. Verify it was actually set
+	// (guards against encoder bugs silently producing uncheckable records).
+	if rec.Crc == 0 && len(data) > 0 {
+		return 0, fmt.Errorf("wal: encoder did not set CRC")
+	}
+
+	w.offset = w.encoder.Offset()
+
+	if w.opts.SyncPolicy == SyncOnAppend {
+		if err := w.syncLocked(); err != nil {
+			return 0, err
+		}
+	}
+
+	return uint64(offset), nil
+}
+
+// SaveSnapshot writes a SnapshotType marker record to the WAL.
+// The marker records the WAL offset and application-defined metadata.
+// Actual snapshot data (e.g., LSM SSTables) lives outside the WAL.
+// This always syncs to ensure the marker is durable.
+func (w *WAL) SaveSnapshot(snap *walpb.Snapshot) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return ErrClosed
+	}
+
+	snapData, err := proto.Marshal(snap)
+	if err != nil {
+		return fmt.Errorf("wal: failed to marshal snapshot: %w", err)
+	}
+
+	rec := &walpb.Record{
+		Type: walpb.SnapshotType,
+		Data: snapData,
+	}
+
+	if _, err := w.encoder.Encode(rec); err != nil {
+		return fmt.Errorf("wal: failed to encode snapshot: %w", err)
+	}
+
+	w.offset = w.encoder.Offset()
+
+	return w.syncLocked()
+}
+
+// Sync flushes buffered data and fsyncs to disk.
+// When SyncPolicy is SyncManual, concurrent callers share a single
+// fdatasync via the group commit mechanism (leader-follower pattern).
+func (w *WAL) Sync() error {
+	if w.opts.SyncPolicy == SyncManual {
+		// Group commit: syncFunc acquires w.mu internally.
+		return w.syncGroup.sync()
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return ErrClosed
+	}
+	return w.syncLocked()
+}
+
+// ReadAll reads all records from the WAL (for recovery).
+// Returns only DataType payloads. CrcType and SnapshotType records
+// are validated by the decoder but filtered out.
+func (w *WAL) ReadAll() ([][]byte, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return nil, ErrClosed
+	}
+
+	if err := w.encoder.Flush(); err != nil {
+		return nil, fmt.Errorf("wal: failed to flush before read: %w", err)
+	}
+
+	segments, err := w.listSegments()
+	if err != nil {
+		return nil, err
+	}
+
+	var data [][]byte
+	for _, seg := range segments {
+		segData, err := w.readSegment(seg.path)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, segData...)
+	}
+
+	return data, nil
+}
+
+// Close closes the WAL.
+func (w *WAL) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return nil
+	}
+
+	w.closed = true
+
+	if err := w.encoder.Flush(); err != nil {
+		w.file.Close()
+		return fmt.Errorf("wal: failed to flush on close: %w", err)
+	}
+
+	if err := w.file.Sync(); err != nil {
+		w.file.Close()
+		return fmt.Errorf("wal: failed to sync on close: %w", err)
+	}
+
+	if err := w.file.Close(); err != nil {
+		return fmt.Errorf("wal: failed to close file: %w", err)
+	}
+
+	return nil
+}
+
+// --- Unexported methods ---
 
 // segmentInfo holds information about a WAL segment file.
 type segmentInfo struct {
 	seq  uint64
 	path string
+}
+
+// segmentPath returns the path for a segment with the given sequence number.
+func (w *WAL) segmentPath(seq uint64) string {
+	return filepath.Join(w.dir, fmt.Sprintf("%s%016d%s", walFilePrefix, seq, walFileSuffix))
 }
 
 // listSegments returns all WAL segment files sorted by sequence number.
@@ -123,15 +285,10 @@ func (w *WAL) listSegments() ([]segmentInfo, error) {
 	return segments, nil
 }
 
-// segmentPath returns the path for a segment with the given sequence number.
-func (w *WAL) segmentPath(seq uint64) string {
-	return filepath.Join(w.dir, fmt.Sprintf("%s%016d%s", walFilePrefix, seq, walFileSuffix))
-}
-
 // createSegment creates a new segment file.
-// prevCrc is the CRC chain value from the previous segment (0 for the first segment).
-// A CrcType checkpoint record is written as the first record of every segment
-// to bridge the CRC chain across segment boundaries.
+// prevCrc is the CRC chain value from the previous segment (0 for the first).
+// Writes a CrcType checkpoint as the first record, then fsyncs to ensure
+// the segment header is durable before any data records.
 func (w *WAL) createSegment(seq uint64, prevCrc uint32) error {
 	path := w.segmentPath(seq)
 
@@ -146,7 +303,6 @@ func (w *WAL) createSegment(seq uint64, prevCrc uint32) error {
 			f.Close()
 			return fmt.Errorf("wal: failed to preallocate: %w", err)
 		}
-		// Seek back to start after preallocation.
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
 			f.Close()
 			return fmt.Errorf("wal: failed to seek after preallocate: %w", err)
@@ -164,6 +320,13 @@ func (w *WAL) createSegment(seq uint64, prevCrc uint32) error {
 		return fmt.Errorf("wal: failed to write CRC checkpoint: %w", err)
 	}
 
+	// Fsync to ensure the segment header (CRC checkpoint) is durable
+	// before any data records are written.
+	if err := w.syncLocked(); err != nil {
+		f.Close()
+		return fmt.Errorf("wal: failed to sync new segment: %w", err)
+	}
+
 	return nil
 }
 
@@ -179,27 +342,16 @@ func (w *WAL) saveCrc(prevCrc uint32) error {
 }
 
 // openSegment opens an existing segment for appending.
-// It reads all records to find the valid end, then seeds the encoder
-// with the decoder's final CRC for continuous chaining.
+// It reads all records to find the valid end, zeros trailing garbage
+// (preserving preallocated space for torn write detection), then seeds
+// the encoder with the decoder's final CRC for continuous chaining.
 func (w *WAL) openSegment(seg segmentInfo) error {
 	f, err := os.OpenFile(seg.path, os.O_RDWR, 0644)
 	if err != nil {
 		return fmt.Errorf("wal: failed to open segment: %w", err)
 	}
 
-	// Get file size for potential truncation later.
-	fileSize, err := f.Seek(0, io.SeekEnd)
-	if err != nil {
-		f.Close()
-		return fmt.Errorf("wal: failed to seek: %w", err)
-	}
-
 	// Read from the beginning to find the last valid record.
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		f.Close()
-		return fmt.Errorf("wal: failed to seek to start: %w", err)
-	}
-
 	decoder := NewDecoder(f)
 	var rec walpb.Record
 	for {
@@ -208,7 +360,6 @@ func (w *WAL) openSegment(seg segmentInfo) error {
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				break
 			}
-			// Corruption — stop at the last valid record.
 			break
 		}
 	}
@@ -220,140 +371,49 @@ func (w *WAL) openSegment(seg segmentInfo) error {
 		return fmt.Errorf("wal: failed to seek to valid offset: %w", err)
 	}
 
-	// Truncate to remove any partial/corrupted data at the end.
-	if validOffset < fileSize {
-		if err := f.Truncate(validOffset); err != nil {
-			f.Close()
-			return fmt.Errorf("wal: failed to truncate: %w", err)
-		}
+	// Zero from valid end to file end. This preserves the file size
+	// (and preallocated space) while ensuring partial/corrupted data
+	// is replaced with zeros — required for torn write detection.
+	if err := zeroToEnd(f); err != nil {
+		f.Close()
+		return fmt.Errorf("wal: failed to zero trailing data: %w", err)
+	}
+
+	// Seek back to valid end for writing.
+	if _, err := f.Seek(validOffset, io.SeekStart); err != nil {
+		f.Close()
+		return fmt.Errorf("wal: failed to seek after zero: %w", err)
 	}
 
 	w.file = f
 	// Seed the encoder with the decoder's final CRC — continuous chain.
-	w.encoder = NewEncoder(f, decoder.LastCRC(), int(validOffset), w.opts.BufferSize)
+	// Only the page offset modulo walPageBytes matters for alignment.
+	w.encoder = NewEncoder(f, decoder.LastCRC(), int(validOffset%int64(walPageBytes)), w.opts.BufferSize)
 	w.seq = seg.seq
 	w.offset = validOffset
 
 	return nil
 }
 
-// Append writes opaque data to the WAL as a DataType record.
-// The WAL owns the Record envelope and CRC computation.
-// Returns the offset where the record was written.
-// If SyncPolicy is SyncOnAppend, the record is flushed and fsynced before returning.
-func (w *WAL) Append(data []byte) (uint64, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.closed {
-		return 0, ErrClosed
-	}
-
-	// Check if we need to rotate.
-	if w.opts.SegmentSize > 0 && w.offset >= w.opts.SegmentSize {
-		if err := w.rotate(); err != nil {
-			return 0, err
-		}
-	}
-
-	// Build the record — WAL owns the envelope.
-	rec := &walpb.Record{
-		Type: walpb.DataType,
-		Data: data,
-	}
-
-	// Encode the record (CRC is set by the encoder's chain).
-	offset, err := w.encoder.Encode(rec)
-	if err != nil {
-		return 0, fmt.Errorf("wal: failed to encode: %w", err)
-	}
-
-	w.offset = w.encoder.Offset()
-
-	// Sync if configured.
-	if w.opts.SyncPolicy == SyncOnAppend {
-		if err := w.syncLocked(); err != nil {
-			return 0, err
-		}
-	}
-
-	return uint64(offset), nil
-}
-
-// SaveSnapshot writes a SnapshotType marker record to the WAL.
-// The snapshot marker records the WAL offset at which the snapshot was taken.
-// Actual snapshot data (e.g., LSM SSTables) lives outside the WAL.
-// This always syncs to ensure the marker is durable.
-func (w *WAL) SaveSnapshot(snap *walpb.Snapshot) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.closed {
-		return ErrClosed
-	}
-
-	snapData, err := proto.Marshal(snap)
-	if err != nil {
-		return fmt.Errorf("wal: failed to marshal snapshot: %w", err)
-	}
-
-	rec := &walpb.Record{
-		Type: walpb.SnapshotType,
-		Data: snapData,
-	}
-
-	if _, err := w.encoder.Encode(rec); err != nil {
-		return fmt.Errorf("wal: failed to encode snapshot: %w", err)
-	}
-
-	w.offset = w.encoder.Offset()
-
-	// Always sync snapshot markers.
-	return w.syncLocked()
-}
-
 // rotate creates a new segment when the current one is full.
-// It bridges the CRC chain by passing the current encoder's CRC
-// to the new segment's CrcType checkpoint.
+// Bridges the CRC chain by passing the current encoder's CRC to the
+// new segment's CrcType checkpoint.
 func (w *WAL) rotate() error {
-	// Flush and sync current segment.
 	if err := w.syncLocked(); err != nil {
 		return err
 	}
 
-	// Capture CRC before closing the encoder.
 	prevCrc := w.encoder.CRC()
 
-	// Close current segment.
 	if err := w.file.Close(); err != nil {
 		return fmt.Errorf("wal: failed to close segment: %w", err)
 	}
 
-	// Create new segment with CRC bridge.
 	return w.createSegment(w.seq+1, prevCrc)
 }
 
-// Sync flushes buffered data and fsyncs to disk.
-// When SyncPolicy is SyncManual, concurrent callers share a single
-// fdatasync via the group commit mechanism.
-func (w *WAL) Sync() error {
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		return ErrClosed
-	}
-	w.mu.Unlock()
-
-	if w.opts.SyncPolicy == SyncManual {
-		return w.syncGroup.sync()
-	}
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.syncLocked()
-}
-
-// syncLocked performs sync while holding the lock.
+// syncLocked flushes the encoder buffer and fsyncs the file.
+// Caller must hold w.mu.
 func (w *WAL) syncLocked() error {
 	if err := w.encoder.Flush(); err != nil {
 		return fmt.Errorf("wal: failed to flush: %w", err)
@@ -362,39 +422,6 @@ func (w *WAL) syncLocked() error {
 		return fmt.Errorf("wal: failed to sync: %w", err)
 	}
 	return nil
-}
-
-// ReadAll reads all records from the WAL (for recovery).
-// This reads all segments in order and returns only DataType records.
-// CrcType and SnapshotType records are validated but filtered out.
-func (w *WAL) ReadAll() ([][]byte, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.closed {
-		return nil, ErrClosed
-	}
-
-	// Flush any buffered data first.
-	if err := w.encoder.Flush(); err != nil {
-		return nil, fmt.Errorf("wal: failed to flush before read: %w", err)
-	}
-
-	segments, err := w.listSegments()
-	if err != nil {
-		return nil, err
-	}
-
-	var data [][]byte
-	for _, seg := range segments {
-		segData, err := w.readSegment(seg.path)
-		if err != nil {
-			return nil, err
-		}
-		data = append(data, segData...)
-	}
-
-	return data, nil
 }
 
 // readSegment reads all records from a segment file.
@@ -422,9 +449,7 @@ func (w *WAL) readSegment(path string) ([][]byte, error) {
 			return nil, fmt.Errorf("wal: failed to decode record: %w", err)
 		}
 
-		// Only return DataType records to callers.
 		if rec.Type == walpb.DataType {
-			// Copy data so it doesn't reference the decoder's buffer.
 			d := make([]byte, len(rec.Data))
 			copy(d, rec.Data)
 			data = append(data, d)
@@ -434,31 +459,39 @@ func (w *WAL) readSegment(path string) ([][]byte, error) {
 	return data, nil
 }
 
-// Close closes the WAL.
-func (w *WAL) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.closed {
+// zeroToEnd zeros the file from the current position to the end.
+// This preserves the file size (preallocated space) while clearing
+// partial writes — required for torn write detection (zero sectors
+// indicate "no data written here").
+func zeroToEnd(f *os.File) error {
+	pos, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	end, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+	if pos >= end {
 		return nil
 	}
-
-	w.closed = true
-
-	if err := w.encoder.Flush(); err != nil {
-		w.file.Close()
-		return fmt.Errorf("wal: failed to flush on close: %w", err)
+	// Seek back to where we were.
+	if _, err := f.Seek(pos, io.SeekStart); err != nil {
+		return err
 	}
-
-	if err := w.file.Sync(); err != nil {
-		w.file.Close()
-		return fmt.Errorf("wal: failed to sync on close: %w", err)
+	// Write zeros in chunks.
+	zeros := make([]byte, 4096)
+	remaining := end - pos
+	for remaining > 0 {
+		n := int64(len(zeros))
+		if n > remaining {
+			n = remaining
+		}
+		if _, err := f.Write(zeros[:n]); err != nil {
+			return err
+		}
+		remaining -= n
 	}
-
-	if err := w.file.Close(); err != nil {
-		return fmt.Errorf("wal: failed to close file: %w", err)
-	}
-
 	return nil
 }
 
