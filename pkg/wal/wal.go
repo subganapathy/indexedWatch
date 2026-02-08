@@ -215,6 +215,53 @@ func (w *WAL) ReadAll() ([][]byte, error) {
 	return data, nil
 }
 
+// PruneBefore deletes all WAL segment files with sequence number less than keepSeq.
+// The currently active segment is never deleted, even if its seq < keepSeq.
+// Returns the number of segments deleted.
+//
+// This is used after a snapshot to reclaim old WAL segments that are no longer
+// needed for recovery.
+func (w *WAL) PruneBefore(keepSeq uint64) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return 0, ErrClosed
+	}
+
+	segments, err := w.listSegments()
+	if err != nil {
+		return 0, err
+	}
+
+	var deleted int
+	for _, seg := range segments {
+		// Never delete the active segment.
+		if seg.seq == w.seq {
+			continue
+		}
+		// Keep segments at or after keepSeq.
+		if seg.seq >= keepSeq {
+			continue
+		}
+		if err := os.Remove(seg.path); err != nil && !os.IsNotExist(err) {
+			return deleted, fmt.Errorf("wal: failed to prune segment %d: %w", seg.seq, err)
+		}
+		deleted++
+	}
+
+	return deleted, nil
+}
+
+// SegmentSeq returns the sequence number of the currently active WAL segment.
+// This is used by the snapshot logic to record which segment was active
+// at snapshot time, enabling WAL pruning of older segments.
+func (w *WAL) SegmentSeq() uint64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.seq
+}
+
 // Close closes the WAL.
 func (w *WAL) Close() error {
 	w.mu.Lock()

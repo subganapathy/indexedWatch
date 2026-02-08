@@ -115,9 +115,9 @@ func OpenTypeStore(dir, typeName string, reg schema.Registry, opts TypeStoreOpti
 		skBuilder: skb,
 	}
 
-	// Recover state: replay all WAL entries into the LSM.
-	var maxSeqNum uint64
-	if err := recover(w, db, &maxSeqNum); err != nil {
+	// Recover state: load snapshot (if available) + replay WAL entries.
+	maxSeqNum, err := recoverWithSnapshot(w, db, dir)
+	if err != nil {
 		skb.close()
 		db.Close()
 		w.Close()
