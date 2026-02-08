@@ -1,0 +1,247 @@
+package skiplist
+
+import (
+	"math"
+	"math/rand/v2"
+	"sync/atomic"
+
+	"github.com/subganapathy/indexedwatch/pkg/lsm/arena"
+)
+
+const pValue = 0.25 // 1/4 probability per level
+
+var probabilities [MaxHeight]uint32
+
+func init() {
+	p := float64(1.0)
+	for i := range MaxHeight {
+		probabilities[i] = uint32(float64(math.MaxUint32) * p)
+		p *= pValue
+	}
+}
+
+// Skiplist is a lock-free concurrent skiplist backed by an arena allocator.
+// It supports concurrent reads and writes via CAS-based insertion.
+// Deletion is not supported — tombstones are handled at a higher layer.
+//
+// Keys are compared lexicographically (bytes.Compare semantics).
+type Skiplist struct {
+	arena  *arena.Arena
+	head   uint32       // arena offset of head sentinel node
+	height atomic.Int32 // current max height (1 ≤ height ≤ MaxHeight)
+}
+
+// New creates a new skiplist on the given arena.
+// The arena must have enough space for the head sentinel node.
+func New(a *arena.Arena) *Skiplist {
+	// Allocate head sentinel with max height, no key, no value.
+	headOffset, err := newNode(a, MaxHeight, nil, nil)
+	if err != nil {
+		panic("arena too small for head node")
+	}
+
+	s := &Skiplist{
+		arena: a,
+		head:  headOffset,
+	}
+	s.height.Store(1)
+	return s
+}
+
+// Add inserts a key-value pair. If the key already exists (exact byte match),
+// returns ErrRecordExists. If the arena is full, returns arena.ErrFull.
+func (s *Skiplist) Add(key, value []byte) error {
+	var spl [MaxHeight]splice
+	if s.findSplice(key, &spl) {
+		return ErrRecordExists
+	}
+
+	height := s.randomHeight()
+	ndOffset, err := newNode(s.arena, height, key, value)
+	if err != nil {
+		return err
+	}
+
+	// Grow the skiplist height if needed (CAS loop).
+	listHeight := s.height.Load()
+	for int32(height) > listHeight {
+		if s.height.CompareAndSwap(listHeight, int32(height)) {
+			break
+		}
+		listHeight = s.height.Load()
+	}
+
+	// Link the node at each level from bottom to top.
+	for i := 0; i < int(height); i++ {
+		for {
+			prevOffset := spl[i].prev
+			nextOffset := spl[i].next
+
+			if prevOffset == 0 {
+				// New level — this node is the first at this height.
+				prevOffset = s.head
+				nextOffset = 0
+			}
+
+			// Set new node's next pointer.
+			nd := getNode(s.arena, ndOffset)
+			nd.tower[i].nextOffset.Store(nextOffset)
+
+			prev := getNode(s.arena, prevOffset)
+			if prev.casNext(i, nextOffset, ndOffset) {
+				break
+			}
+
+			// CAS failed — recompute splice at this level.
+			prevOffset, nextOffset, found := s.findSpliceForLevel(key, i, prevOffset)
+			if found {
+				if i != 0 {
+					panic("duplicate found at non-base level")
+				}
+				return ErrRecordExists
+			}
+			spl[i].prev = prevOffset
+			spl[i].next = nextOffset
+		}
+	}
+
+	return nil
+}
+
+// Get returns the value for the given key, or nil if not found.
+func (s *Skiplist) Get(key []byte) ([]byte, bool) {
+	_, nd, match := s.seekGE(key)
+	if nd == 0 || !match {
+		return nil, false
+	}
+	n := getNode(s.arena, nd)
+	return n.getValue(s.arena), true
+}
+
+// Arena returns the underlying arena.
+func (s *Skiplist) Arena() *arena.Arena {
+	return s.arena
+}
+
+// Height returns the current max height.
+func (s *Skiplist) Height() int {
+	return int(s.height.Load())
+}
+
+// splice records the (prev, next) offsets bracketing a key at one level.
+type splice struct {
+	prev uint32 // arena offset of the node before the key
+	next uint32 // arena offset of the node at or after the key
+}
+
+func (s *Skiplist) randomHeight() uint32 {
+	rnd := rand.Uint32()
+	h := uint32(1)
+	for h < MaxHeight && rnd <= probabilities[h] {
+		h++
+	}
+	return h
+}
+
+// findSplice finds the splice at every level for the given key.
+// Returns true if an exact match is found.
+func (s *Skiplist) findSplice(key []byte, spl *[MaxHeight]splice) bool {
+	prevOffset := s.head
+	found := false
+
+	for level := int(s.height.Load()) - 1; level >= 0; level-- {
+		nextOffset := getNode(s.arena, prevOffset).getNext(level)
+
+		for nextOffset != 0 {
+			next := getNode(s.arena, nextOffset)
+			nextKey := next.getKey(s.arena)
+			cmp := compareKeys(key, nextKey)
+			if cmp <= 0 {
+				if cmp == 0 {
+					found = true
+				}
+				break
+			}
+			prevOffset = nextOffset
+			nextOffset = next.getNext(level)
+		}
+
+		spl[level].prev = prevOffset
+		spl[level].next = nextOffset
+	}
+
+	return found
+}
+
+// findSpliceForLevel recomputes the splice at a single level starting from start.
+func (s *Skiplist) findSpliceForLevel(key []byte, level int, start uint32) (prev, next uint32, found bool) {
+	prev = start
+	next = getNode(s.arena, prev).getNext(level)
+
+	for next != 0 {
+		nd := getNode(s.arena, next)
+		nextKey := nd.getKey(s.arena)
+		cmp := compareKeys(key, nextKey)
+		if cmp <= 0 {
+			if cmp == 0 {
+				found = true
+			}
+			return
+		}
+		prev = next
+		next = nd.getNext(level)
+	}
+	return
+}
+
+// seekGE finds the first node with key >= target.
+// Returns (prevOffset, nodeOffset, exactMatch).
+func (s *Skiplist) seekGE(target []byte) (uint32, uint32, bool) {
+	prevOffset := s.head
+	var nextOffset uint32
+
+	for level := int(s.height.Load()) - 1; level >= 0; level-- {
+		nextOffset = getNode(s.arena, prevOffset).getNext(level)
+
+		for nextOffset != 0 {
+			nd := getNode(s.arena, nextOffset)
+			nextKey := nd.getKey(s.arena)
+			cmp := compareKeys(target, nextKey)
+			if cmp <= 0 {
+				break
+			}
+			prevOffset = nextOffset
+			nextOffset = nd.getNext(level)
+		}
+	}
+
+	if nextOffset == 0 {
+		return prevOffset, 0, false
+	}
+	nd := getNode(s.arena, nextOffset)
+	match := compareKeys(target, nd.getKey(s.arena)) == 0
+	return prevOffset, nextOffset, match
+}
+
+// compareKeys does lexicographic byte comparison.
+func compareKeys(a, b []byte) int {
+	n := len(a)
+	if n > len(b) {
+		n = len(b)
+	}
+	for i := 0; i < n; i++ {
+		if a[i] < b[i] {
+			return -1
+		}
+		if a[i] > b[i] {
+			return 1
+		}
+	}
+	if len(a) < len(b) {
+		return -1
+	}
+	if len(a) > len(b) {
+		return 1
+	}
+	return 0
+}
