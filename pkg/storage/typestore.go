@@ -46,19 +46,23 @@ func DefaultTypeStoreOptions() TypeStoreOptions {
 //  2. Build StorageWALEntry with operation, PK, data, seqNums
 //  3. WAL Append + Sync (durable before LSM apply)
 //  4. Apply to Primary LSM (immediately visible to reads)
+//  5. Update Secondary LSMs synchronously (strong consistency)
 //
 // Read path (lock-free, reads go directly to LSM):
 //   - Get: point lookup by PK via Primary LSM
 //   - List: range scan with optional prefix bounds via Primary LSM
+//   - ListByField: secondary index scan → Primary re-check (see query.go)
 //
-// Recovery: replay all WAL entries into the Primary LSM (see apply.go).
+// Recovery: replay all WAL entries into the Primary LSM (see apply.go),
+// then re-index all secondary indexes from the Primary LSM.
 type TypeStore struct {
-	typeName string
-	dir      string
-	w        walAppender
-	db       *lsm.DB
-	registry schema.Registry
-	checkers []AdmissionChecker
+	typeName  string
+	dir       string
+	w         walAppender
+	db        *lsm.DB
+	registry  schema.Registry
+	checkers  []AdmissionChecker
+	skBuilder *skBuilder
 
 	// seqNum is the storage-level sequence number, separate from LSM's internal seqNum.
 	// Monotonically increasing. Stored in WAL entries and StoredRecords for OCC.
@@ -76,6 +80,9 @@ type TypeStore struct {
 //	dir/
 //	  wal/   — per-type resource WAL
 //	  lsm/   — Primary LSM
+//	  sk/    — Secondary LSMs (one per indexed field)
+//	    user_id/
+//	    metadata_region/
 func OpenTypeStore(dir, typeName string, reg schema.Registry, opts TypeStoreOptions) (*TypeStore, error) {
 	if opts.WALOptions == (wal.Options{}) {
 		opts.WALOptions = wal.ResourceOptions()
@@ -83,6 +90,7 @@ func OpenTypeStore(dir, typeName string, reg schema.Registry, opts TypeStoreOpti
 
 	walDir := filepath.Join(dir, "wal")
 	lsmDir := filepath.Join(dir, "lsm")
+	skDir := filepath.Join(dir, "sk")
 
 	w, err := wal.Open(walDir, opts.WALOptions)
 	if err != nil {
@@ -95,23 +103,35 @@ func OpenTypeStore(dir, typeName string, reg schema.Registry, opts TypeStoreOpti
 		return nil, fmt.Errorf("storage: open LSM for %s: %w", typeName, err)
 	}
 
+	skb := newSKBuilder(skDir, opts.LSMOptions)
+
 	ts := &TypeStore{
-		typeName: typeName,
-		dir:      dir,
-		w:        w,
-		db:       db,
-		registry: reg,
-		checkers: defaultCheckers(),
+		typeName:  typeName,
+		dir:       dir,
+		w:         w,
+		db:        db,
+		registry:  reg,
+		checkers:  defaultCheckers(),
+		skBuilder: skb,
 	}
 
 	// Recover state: replay all WAL entries into the LSM.
 	var maxSeqNum uint64
 	if err := recover(w, db, &maxSeqNum); err != nil {
+		skb.close()
 		db.Close()
 		w.Close()
 		return nil, fmt.Errorf("storage: recover %s: %w", typeName, err)
 	}
 	ts.seqNum.Store(maxSeqNum)
+
+	// Open secondary indexes from the current schema and re-index.
+	if err := ts.initSecondaryIndexes(); err != nil {
+		skb.close()
+		db.Close()
+		w.Close()
+		return nil, fmt.Errorf("storage: init secondary indexes for %s: %w", typeName, err)
+	}
 
 	return ts, nil
 }
@@ -164,6 +184,14 @@ func (ts *TypeStore) Create(pk, data []byte) (uint64, error) {
 		return 0, fmt.Errorf("storage: LSM set: %w", err)
 	}
 
+	// Update secondary indexes.
+	if err := ts.skBuilder.processWrite(
+		storagev1.StorageOperation_STORAGE_OPERATION_CREATE,
+		pk, nil, data, seqNum,
+	); err != nil {
+		return 0, fmt.Errorf("storage: SK update: %w", err)
+	}
+
 	return seqNum, nil
 }
 
@@ -214,6 +242,14 @@ func (ts *TypeStore) Update(pk, data []byte, expectedSeqNum uint64) (uint64, err
 		return 0, fmt.Errorf("storage: LSM set: %w", err)
 	}
 
+	// Update secondary indexes (pass old data for SK entry removal).
+	if err := ts.skBuilder.processWrite(
+		storagev1.StorageOperation_STORAGE_OPERATION_UPDATE,
+		pk, existing.Data, data, seqNum,
+	); err != nil {
+		return 0, fmt.Errorf("storage: SK update: %w", err)
+	}
+
 	return seqNum, nil
 }
 
@@ -261,6 +297,14 @@ func (ts *TypeStore) Delete(pk []byte, expectedSeqNum uint64) (uint64, error) {
 	}
 	if err := ts.db.Set(pk, record.Marshal()); err != nil {
 		return 0, fmt.Errorf("storage: LSM set: %w", err)
+	}
+
+	// Update secondary indexes (remove old SK entries).
+	if err := ts.skBuilder.processWrite(
+		storagev1.StorageOperation_STORAGE_OPERATION_DELETE,
+		pk, existing.Data, nil, seqNum,
+	); err != nil {
+		return 0, fmt.Errorf("storage: SK update: %w", err)
 	}
 
 	return seqNum, nil
@@ -347,13 +391,16 @@ func (ts *TypeStore) TypeName() string {
 	return ts.typeName
 }
 
-// Close shuts down the TypeStore, closing the WAL and Primary LSM.
+// Close shuts down the TypeStore, closing the WAL, Primary LSM, and all Secondary LSMs.
 func (ts *TypeStore) Close() error {
 	if !ts.closed.CompareAndSwap(false, true) {
 		return nil
 	}
 
 	var firstErr error
+	if err := ts.skBuilder.close(); err != nil && firstErr == nil {
+		firstErr = err
+	}
 	if err := ts.db.Close(); err != nil && firstErr == nil {
 		firstErr = err
 	}
@@ -404,6 +451,30 @@ func (ts *TypeStore) writeWAL(entry *storagev1.StorageWALEntry) error {
 	}
 	if err := ts.w.Sync(); err != nil {
 		return fmt.Errorf("storage: WAL sync: %w", err)
+	}
+
+	return nil
+}
+
+// initSecondaryIndexes opens SK LSMs for all secondary indexes defined in
+// the current schema and re-indexes them from the Primary LSM.
+func (ts *TypeStore) initSecondaryIndexes() error {
+	// If the type has no schema registered, skip — no indexes to create.
+	currentSchema, err := ts.registry.Get(ts.typeName)
+	if err != nil {
+		return nil // no current schema, no indexes
+	}
+
+	for _, fieldName := range currentSchema.SecondaryIndexes {
+		si, err := ts.skBuilder.openIndex(fieldName)
+		if err != nil {
+			return fmt.Errorf("open SK %s: %w", fieldName, err)
+		}
+
+		// Re-index from Primary LSM to ensure SK is consistent.
+		if err := reindex(ts.db, si); err != nil {
+			return fmt.Errorf("reindex %s: %w", fieldName, err)
+		}
 	}
 
 	return nil
