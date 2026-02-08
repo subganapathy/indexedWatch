@@ -1,0 +1,435 @@
+package storage
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+
+	storagev1 "github.com/subganapathy/indexedwatch/gen/go/indexedwatch/storage/v1"
+	"github.com/subganapathy/indexedwatch/pkg/lsm"
+	"github.com/subganapathy/indexedwatch/pkg/schema"
+	"github.com/subganapathy/indexedwatch/pkg/wal"
+	"google.golang.org/protobuf/proto"
+)
+
+// walAppender is the subset of wal.WAL used by TypeStore.
+// Extracted for testability.
+type walAppender interface {
+	Append(data []byte) (uint64, error)
+	Sync() error
+	Close() error
+}
+
+// TypeStoreOptions configures a TypeStore.
+type TypeStoreOptions struct {
+	// LSMOptions configures the Primary LSM.
+	LSMOptions lsm.Options
+	// WALOptions configures the per-type resource WAL.
+	WALOptions wal.Options
+}
+
+// DefaultTypeStoreOptions returns sensible defaults for production use.
+func DefaultTypeStoreOptions() TypeStoreOptions {
+	return TypeStoreOptions{
+		WALOptions: wal.ResourceOptions(),
+	}
+}
+
+// TypeStore manages the write-ahead log, Primary LSM, and Secondary LSMs
+// for a single resource type.
+//
+// Write path (serialized by mu):
+//  1. Run admission checkers (PK uniqueness, OCC, schema validation)
+//  2. Build StorageWALEntry with operation, PK, data, seqNums
+//  3. WAL Append + Sync (durable before LSM apply)
+//  4. Apply to Primary LSM (immediately visible to reads)
+//
+// Read path (lock-free, reads go directly to LSM):
+//   - Get: point lookup by PK via Primary LSM
+//   - List: range scan with optional prefix bounds via Primary LSM
+//
+// Recovery: replay all WAL entries into the Primary LSM (see apply.go).
+type TypeStore struct {
+	typeName string
+	dir      string
+	w        walAppender
+	db       *lsm.DB
+	registry *schema.Registry
+	checkers []AdmissionChecker
+
+	// seqNum is the storage-level sequence number, separate from LSM's internal seqNum.
+	// Monotonically increasing. Stored in WAL entries and StoredRecords for OCC.
+	seqNum atomic.Uint64
+
+	// mu serializes write operations. Reads are lock-free.
+	// Serialization is required for OCC correctness: read-check-write must be atomic.
+	mu     sync.Mutex
+	closed atomic.Bool
+}
+
+// OpenTypeStore opens or creates a TypeStore for the given resource type.
+// The directory structure is:
+//
+//	dir/
+//	  wal/   — per-type resource WAL
+//	  lsm/   — Primary LSM
+func OpenTypeStore(dir, typeName string, registry *schema.Registry, opts TypeStoreOptions) (*TypeStore, error) {
+	if opts.WALOptions == (wal.Options{}) {
+		opts.WALOptions = wal.ResourceOptions()
+	}
+
+	walDir := filepath.Join(dir, "wal")
+	lsmDir := filepath.Join(dir, "lsm")
+
+	w, err := wal.Open(walDir, opts.WALOptions)
+	if err != nil {
+		return nil, fmt.Errorf("storage: open WAL for %s: %w", typeName, err)
+	}
+
+	db, err := lsm.Open(lsmDir, opts.LSMOptions)
+	if err != nil {
+		w.Close()
+		return nil, fmt.Errorf("storage: open LSM for %s: %w", typeName, err)
+	}
+
+	ts := &TypeStore{
+		typeName: typeName,
+		dir:      dir,
+		w:        w,
+		db:       db,
+		registry: registry,
+		checkers: defaultCheckers(),
+	}
+
+	// Recover state: replay all WAL entries into the LSM.
+	var maxSeqNum uint64
+	if err := recover(w, db, &maxSeqNum); err != nil {
+		db.Close()
+		w.Close()
+		return nil, fmt.Errorf("storage: recover %s: %w", typeName, err)
+	}
+	ts.seqNum.Store(maxSeqNum)
+
+	return ts, nil
+}
+
+// Create inserts a new resource. Returns the assigned storage seqNum.
+// Fails with ErrAlreadyExists if the PK already exists (and is not deleted).
+func (ts *TypeStore) Create(pk, data []byte) (uint64, error) {
+	if ts.closed.Load() {
+		return 0, ErrClosed
+	}
+
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	// Resolve current schema.
+	currentSchema, err := ts.currentSchema()
+	if err != nil {
+		return 0, err
+	}
+
+	// Read existing record for admission.
+	existing := ts.getRecordOrNil(pk)
+
+	// Run admission.
+	req := &WriteRequest{
+		Operation:  storagev1.StorageOperation_STORAGE_OPERATION_CREATE,
+		PrimaryKey: pk,
+		Data:       data,
+		Existing:   existing,
+		Schema:     currentSchema,
+	}
+	if err := runAdmission(ts.checkers, req); err != nil {
+		return 0, err
+	}
+
+	seqNum := ts.seqNum.Add(1)
+
+	// Build and persist WAL entry.
+	entry := &storagev1.StorageWALEntry{
+		Operation:     storagev1.StorageOperation_STORAGE_OPERATION_CREATE,
+		PrimaryKey:    pk,
+		Data:          data,
+		SchemaVersion: currentSchema.Version,
+		CreateSeqNum:  seqNum,
+		UpdateSeqNum:  seqNum,
+	}
+	if err := ts.writeWAL(entry); err != nil {
+		return 0, err
+	}
+
+	// Apply to LSM.
+	record := &StoredRecord{
+		Data:          data,
+		SchemaVersion: currentSchema.Version,
+		CreateSeqNum:  seqNum,
+		UpdateSeqNum:  seqNum,
+	}
+	if err := ts.db.Set(pk, record.Marshal()); err != nil {
+		return 0, fmt.Errorf("storage: LSM set: %w", err)
+	}
+
+	return seqNum, nil
+}
+
+// Update modifies an existing resource. Returns the assigned storage seqNum.
+// The expectedSeqNum must match the record's current UpdateSeqNum (OCC).
+// Pass expectedSeqNum=0 for unconditional update (no OCC check).
+func (ts *TypeStore) Update(pk, data []byte, expectedSeqNum uint64) (uint64, error) {
+	if ts.closed.Load() {
+		return 0, ErrClosed
+	}
+
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	currentSchema, err := ts.currentSchema()
+	if err != nil {
+		return 0, err
+	}
+
+	existing := ts.getRecordOrNil(pk)
+
+	req := &WriteRequest{
+		Operation:      storagev1.StorageOperation_STORAGE_OPERATION_UPDATE,
+		PrimaryKey:     pk,
+		Data:           data,
+		ExpectedSeqNum: expectedSeqNum,
+		Existing:       existing,
+		Schema:         currentSchema,
+	}
+	if err := runAdmission(ts.checkers, req); err != nil {
+		return 0, err
+	}
+
+	seqNum := ts.seqNum.Add(1)
+
+	entry := &storagev1.StorageWALEntry{
+		Operation:      storagev1.StorageOperation_STORAGE_OPERATION_UPDATE,
+		PrimaryKey:     pk,
+		Data:           data,
+		SchemaVersion:  currentSchema.Version,
+		ExpectedSeqNum: expectedSeqNum,
+		CreateSeqNum:   existing.CreateSeqNum,
+		UpdateSeqNum:   seqNum,
+	}
+	if err := ts.writeWAL(entry); err != nil {
+		return 0, err
+	}
+
+	record := &StoredRecord{
+		Data:          data,
+		SchemaVersion: currentSchema.Version,
+		CreateSeqNum:  existing.CreateSeqNum,
+		UpdateSeqNum:  seqNum,
+	}
+	if err := ts.db.Set(pk, record.Marshal()); err != nil {
+		return 0, fmt.Errorf("storage: LSM set: %w", err)
+	}
+
+	return seqNum, nil
+}
+
+// Delete removes an existing resource (logical delete). Returns the assigned storage seqNum.
+// The expectedSeqNum must match the record's current UpdateSeqNum (OCC).
+// Pass expectedSeqNum=0 for unconditional delete.
+func (ts *TypeStore) Delete(pk []byte, expectedSeqNum uint64) (uint64, error) {
+	if ts.closed.Load() {
+		return 0, ErrClosed
+	}
+
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	existing := ts.getRecordOrNil(pk)
+
+	// Use the existing schema version for the delete record, or empty if no schema.
+	var schemaVersion string
+	if existing != nil {
+		schemaVersion = existing.SchemaVersion
+	}
+
+	req := &WriteRequest{
+		Operation:      storagev1.StorageOperation_STORAGE_OPERATION_DELETE,
+		PrimaryKey:     pk,
+		ExpectedSeqNum: expectedSeqNum,
+		Existing:       existing,
+	}
+	if err := runAdmission(ts.checkers, req); err != nil {
+		return 0, err
+	}
+
+	seqNum := ts.seqNum.Add(1)
+
+	entry := &storagev1.StorageWALEntry{
+		Operation:      storagev1.StorageOperation_STORAGE_OPERATION_DELETE,
+		PrimaryKey:     pk,
+		SchemaVersion:  schemaVersion,
+		ExpectedSeqNum: expectedSeqNum,
+		CreateSeqNum:   existing.CreateSeqNum,
+		UpdateSeqNum:   seqNum,
+	}
+	if err := ts.writeWAL(entry); err != nil {
+		return 0, err
+	}
+
+	// Logical delete: store tombstone with IsDeleted=true.
+	record := &StoredRecord{
+		IsDeleted:     true,
+		SchemaVersion: schemaVersion,
+		CreateSeqNum:  existing.CreateSeqNum,
+		UpdateSeqNum:  seqNum,
+	}
+	if err := ts.db.Set(pk, record.Marshal()); err != nil {
+		return 0, fmt.Errorf("storage: LSM set: %w", err)
+	}
+
+	return seqNum, nil
+}
+
+// Get retrieves a resource by primary key.
+// Returns ErrNotFound if the resource does not exist or has been deleted.
+func (ts *TypeStore) Get(pk []byte) (*StoredRecord, error) {
+	if ts.closed.Load() {
+		return nil, ErrClosed
+	}
+
+	record, err := ts.getRecord(pk)
+	if err != nil {
+		if errors.Is(err, lsm.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if record.IsDeleted {
+		return nil, ErrNotFound
+	}
+	return record, nil
+}
+
+// ListEntry is a primary key + record pair returned by List.
+type ListEntry struct {
+	PrimaryKey []byte
+	Record     *StoredRecord
+}
+
+// List returns all non-deleted resources whose PK is in [startKey, endKey).
+// Pass nil for startKey to start from the beginning.
+// Pass nil for endKey to scan to the end.
+func (ts *TypeStore) List(startKey, endKey []byte) ([]ListEntry, error) {
+	if ts.closed.Load() {
+		return nil, ErrClosed
+	}
+
+	it := ts.db.NewIterator()
+	defer it.Close()
+
+	var positioned bool
+	if len(startKey) > 0 {
+		positioned = it.SeekGE(startKey)
+	} else {
+		positioned = it.First()
+	}
+
+	var entries []ListEntry
+	for positioned && it.Valid() {
+		key := it.Key()
+		if len(endKey) > 0 && bytes.Compare(key, endKey) >= 0 {
+			break
+		}
+
+		record, err := UnmarshalStoredRecord(it.Value())
+		if err != nil {
+			return nil, fmt.Errorf("storage: unmarshal record at %q: %w", key, err)
+		}
+
+		if !record.IsDeleted {
+			pk := make([]byte, len(key))
+			copy(pk, key)
+			entries = append(entries, ListEntry{
+				PrimaryKey: pk,
+				Record:     record,
+			})
+		}
+
+		positioned = it.Next()
+	}
+
+	return entries, nil
+}
+
+// LastSeqNum returns the highest storage sequence number assigned.
+func (ts *TypeStore) LastSeqNum() uint64 {
+	return ts.seqNum.Load()
+}
+
+// TypeName returns the resource type name.
+func (ts *TypeStore) TypeName() string {
+	return ts.typeName
+}
+
+// Close shuts down the TypeStore, closing the WAL and Primary LSM.
+func (ts *TypeStore) Close() error {
+	if !ts.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	var firstErr error
+	if err := ts.db.Close(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := ts.w.Close(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
+}
+
+// --- Internal helpers ---
+
+// currentSchema returns the current schema version for this type.
+func (ts *TypeStore) currentSchema() (*schema.Schema, error) {
+	s, err := ts.registry.GetCurrent(ts.typeName)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrNoSchema, ts.typeName, err)
+	}
+	return s, nil
+}
+
+// getRecord reads and unmarshals a record from the LSM.
+func (ts *TypeStore) getRecord(pk []byte) (*StoredRecord, error) {
+	val, err := ts.db.Get(pk)
+	if err != nil {
+		return nil, err
+	}
+	return UnmarshalStoredRecord(val)
+}
+
+// getRecordOrNil reads a record, returning nil if not found.
+func (ts *TypeStore) getRecordOrNil(pk []byte) *StoredRecord {
+	record, err := ts.getRecord(pk)
+	if err != nil {
+		return nil
+	}
+	return record
+}
+
+// writeWAL marshals and persists a WAL entry, then syncs.
+func (ts *TypeStore) writeWAL(entry *storagev1.StorageWALEntry) error {
+	data, err := proto.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("storage: marshal WAL entry: %w", err)
+	}
+
+	if _, err := ts.w.Append(data); err != nil {
+		return fmt.Errorf("storage: WAL append: %w", err)
+	}
+	if err := ts.w.Sync(); err != nil {
+		return fmt.Errorf("storage: WAL sync: %w", err)
+	}
+
+	return nil
+}

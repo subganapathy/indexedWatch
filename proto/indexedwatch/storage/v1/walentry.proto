@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package indexedwatch.storage.v1;
+
+option go_package = "github.com/subganapathy/indexedwatch/gen/go/indexedwatch/storage/v1;storagev1";
+
+// StorageWALEntry is persisted as opaque bytes in a per-type resource WAL.
+// Each entry represents a single write operation that, when replayed in order,
+// materializes the Primary LSM state for that resource type.
+//
+// The storage layer serializes this message via proto.Marshal and passes the
+// result to WAL.Append(data). On recovery, WAL.ReadAll returns these payloads,
+// which are deserialized and replayed into the LSM.
+message StorageWALEntry {
+  // The operation type.
+  StorageOperation operation = 1;
+
+  // Primary key of the resource.
+  bytes primary_key = 2;
+
+  // Resource data (opaque to the storage layer).
+  // Empty for DELETE operations.
+  bytes data = 3;
+
+  // Schema version this write was validated against.
+  string schema_version = 4;
+
+  // For OCC: the expected UpdateSeqNum of the existing record.
+  // Only meaningful for UPDATE and DELETE operations.
+  // Zero means "no expectation" (unconditional write).
+  uint64 expected_seq_num = 5;
+
+  // The CreateSeqNum stored in the resulting StoredRecord.
+  // For CREATE: equals update_seq_num (new record).
+  // For UPDATE/DELETE: carried forward from existing record.
+  uint64 create_seq_num = 6;
+
+  // The UpdateSeqNum stored in the resulting StoredRecord.
+  // Monotonically increasing per TypeStore. Used for OCC on subsequent writes.
+  uint64 update_seq_num = 7;
+}
+
+// StorageOperation enumerates the write operations on a resource.
+enum StorageOperation {
+  STORAGE_OPERATION_UNSPECIFIED = 0;
+
+  // Create a new resource. Fails if PK already exists (and is not deleted).
+  STORAGE_OPERATION_CREATE = 1;
+
+  // Update an existing resource. Requires OCC check (expectedSeqNum).
+  STORAGE_OPERATION_UPDATE = 2;
+
+  // Delete an existing resource. Requires OCC check (expectedSeqNum).
+  STORAGE_OPERATION_DELETE = 3;
+}
