@@ -23,12 +23,24 @@ type walAppender interface {
 	Close() error
 }
 
+// WriteEvent is emitted after each successful write for watch notification.
+type WriteEvent struct {
+	SeqNum    uint64
+	Operation storagev1.StorageOperation
+	PrimaryKey []byte
+	Data       []byte
+}
+
 // TypeStoreOptions configures a TypeStore.
 type TypeStoreOptions struct {
 	// LSMOptions configures the Primary LSM.
 	LSMOptions lsm.Options
 	// WALOptions configures the per-type resource WAL.
 	WALOptions wal.Options
+	// OnWrite is called after each successful write (WAL + LSM + SK applied).
+	// Used by the watch system to feed events into the ring buffer.
+	// Optional — nil means no notifications.
+	OnWrite func(WriteEvent)
 }
 
 // DefaultTypeStoreOptions returns sensible defaults for production use.
@@ -63,6 +75,7 @@ type TypeStore struct {
 	registry  schema.Registry
 	checkers  []AdmissionChecker
 	skBuilder *skBuilder
+	onWrite   func(WriteEvent)
 
 	// seqNum is the storage-level sequence number, separate from LSM's internal seqNum.
 	// Monotonically increasing. Stored in WAL entries and StoredRecords for OCC.
@@ -113,6 +126,7 @@ func OpenTypeStore(dir, typeName string, reg schema.Registry, opts TypeStoreOpti
 		registry:  reg,
 		checkers:  defaultCheckers(),
 		skBuilder: skb,
+		onWrite:   opts.OnWrite,
 	}
 
 	// Recover state: load snapshot (if available) + replay WAL entries.
@@ -192,6 +206,9 @@ func (ts *TypeStore) Create(pk, data []byte) (uint64, error) {
 		return 0, fmt.Errorf("storage: SK update: %w", err)
 	}
 
+	// Notify watchers.
+	ts.notifyWrite(seqNum, storagev1.StorageOperation_STORAGE_OPERATION_CREATE, pk, data)
+
 	return seqNum, nil
 }
 
@@ -250,6 +267,9 @@ func (ts *TypeStore) Update(pk, data []byte, expectedSeqNum uint64) (uint64, err
 		return 0, fmt.Errorf("storage: SK update: %w", err)
 	}
 
+	// Notify watchers.
+	ts.notifyWrite(seqNum, storagev1.StorageOperation_STORAGE_OPERATION_UPDATE, pk, data)
+
 	return seqNum, nil
 }
 
@@ -306,6 +326,9 @@ func (ts *TypeStore) Delete(pk []byte, expectedSeqNum uint64) (uint64, error) {
 	); err != nil {
 		return 0, fmt.Errorf("storage: SK update: %w", err)
 	}
+
+	// Notify watchers.
+	ts.notifyWrite(seqNum, storagev1.StorageOperation_STORAGE_OPERATION_DELETE, pk, nil)
 
 	return seqNum, nil
 }
@@ -437,6 +460,53 @@ func (ts *TypeStore) getRecordOrNil(pk []byte) *StoredRecord {
 		return nil
 	}
 	return record
+}
+
+// notifyWrite calls the OnWrite callback if set.
+func (ts *TypeStore) notifyWrite(seqNum uint64, op storagev1.StorageOperation, pk, data []byte) {
+	if ts.onWrite != nil {
+		ts.onWrite(WriteEvent{
+			SeqNum:     seqNum,
+			Operation:  op,
+			PrimaryKey: pk,
+			Data:       data,
+		})
+	}
+}
+
+// SnapshotForWatch returns all non-deleted resources at the current point-in-time,
+// suitable for the snapshot phase of a watch stream.
+// Returns the seqNum at which the snapshot was taken and the list of resources.
+func (ts *TypeStore) SnapshotForWatch() (seqNum uint64, pks [][]byte, records []*StoredRecord, err error) {
+	if ts.closed.Load() {
+		return 0, nil, nil, ErrClosed
+	}
+
+	ts.mu.Lock()
+	seqNum = ts.seqNum.Load()
+	it := ts.db.NewIterator()
+	ts.mu.Unlock()
+	defer it.Close()
+
+	if it.First() {
+		for it.Valid() {
+			record, rerr := UnmarshalStoredRecord(it.Value())
+			if rerr != nil {
+				return 0, nil, nil, fmt.Errorf("storage: unmarshal snapshot record: %w", rerr)
+			}
+			if !record.IsDeleted {
+				pk := make([]byte, len(it.Key()))
+				copy(pk, it.Key())
+				pks = append(pks, pk)
+				records = append(records, record)
+			}
+			if !it.Next() {
+				break
+			}
+		}
+	}
+
+	return seqNum, pks, records, nil
 }
 
 // writeWAL marshals and persists a WAL entry, then syncs.
