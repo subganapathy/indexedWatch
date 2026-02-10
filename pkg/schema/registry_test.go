@@ -16,7 +16,7 @@ func testSchema(typeName, pk string, indexes ...string) *Schema {
 	}
 }
 
-func openTestRegistry(t *testing.T) *Registry {
+func openTestRegistry(t *testing.T) Registry {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "schema-wal")
 	r, err := Open(dir)
