@@ -23,7 +23,7 @@ import (
 //	      lsm/
 type StorageManager struct {
 	baseDir  string
-	registry *schema.Registry
+	registry schema.Registry
 	opts     TypeStoreOptions
 
 	mu    sync.Mutex
@@ -34,7 +34,7 @@ type StorageManager struct {
 
 // OpenStorageManager creates a new StorageManager.
 // It does not open any TypeStores immediately — they are opened on first access.
-func OpenStorageManager(baseDir string, registry *schema.Registry, opts TypeStoreOptions) *StorageManager {
+func OpenStorageManager(baseDir string, registry schema.Registry, opts TypeStoreOptions) *StorageManager {
 	return &StorageManager{
 		baseDir:  baseDir,
 		registry: registry,

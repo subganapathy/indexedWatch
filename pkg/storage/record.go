@@ -8,15 +8,14 @@ import (
 
 const (
 	// recordVersion is the binary encoding version for StoredRecord.
-	recordVersion = 1
+	recordVersion = 2
 
 	// recordHeaderSize is the fixed-size header:
 	//   1 byte:  version
 	//   1 byte:  flags (bit 0 = isDeleted)
 	//   8 bytes: createSeqNum (big-endian)
 	//   8 bytes: updateSeqNum (big-endian)
-	//   2 bytes: schemaVersion length (big-endian)
-	recordHeaderSize = 1 + 1 + 8 + 8 + 2
+	recordHeaderSize = 1 + 1 + 8 + 8
 )
 
 // StoredRecord is the value format stored in the Primary LSM.
@@ -28,9 +27,6 @@ type StoredRecord struct {
 	// Data is the resource payload (opaque bytes, typically JSON).
 	// Nil for deleted records.
 	Data []byte
-
-	// SchemaVersion is the schema version this record was written under.
-	SchemaVersion string
 
 	// CreateSeqNum is the storage sequence number when the record was first created.
 	CreateSeqNum uint64
@@ -53,12 +49,9 @@ type StoredRecord struct {
 //	[1] flags
 //	[8] createSeqNum (big-endian)
 //	[8] updateSeqNum (big-endian)
-//	[2] schemaVersion length (big-endian)
-//	[N] schemaVersion string
 //	[M] data bytes
 func (r *StoredRecord) Marshal() []byte {
-	svLen := len(r.SchemaVersion)
-	size := recordHeaderSize + svLen + len(r.Data)
+	size := recordHeaderSize + len(r.Data)
 	buf := make([]byte, size)
 
 	buf[0] = recordVersion
@@ -67,9 +60,7 @@ func (r *StoredRecord) Marshal() []byte {
 	}
 	binary.BigEndian.PutUint64(buf[2:], r.CreateSeqNum)
 	binary.BigEndian.PutUint64(buf[10:], r.UpdateSeqNum)
-	binary.BigEndian.PutUint16(buf[18:], uint16(svLen))
-	copy(buf[recordHeaderSize:], r.SchemaVersion)
-	copy(buf[recordHeaderSize+svLen:], r.Data)
+	copy(buf[recordHeaderSize:], r.Data)
 
 	return buf
 }
@@ -84,22 +75,15 @@ func UnmarshalStoredRecord(buf []byte) (*StoredRecord, error) {
 		return nil, fmt.Errorf("storage: unknown record version %d", buf[0])
 	}
 
-	svLen := int(binary.BigEndian.Uint16(buf[18:]))
-	if len(buf) < recordHeaderSize+svLen {
-		return nil, errors.New("storage: record truncated")
-	}
-
 	r := &StoredRecord{
-		IsDeleted:     buf[1]&1 != 0,
-		CreateSeqNum:  binary.BigEndian.Uint64(buf[2:]),
-		UpdateSeqNum:  binary.BigEndian.Uint64(buf[10:]),
-		SchemaVersion: string(buf[recordHeaderSize : recordHeaderSize+svLen]),
+		IsDeleted:    buf[1]&1 != 0,
+		CreateSeqNum: binary.BigEndian.Uint64(buf[2:]),
+		UpdateSeqNum: binary.BigEndian.Uint64(buf[10:]),
 	}
 
-	dataStart := recordHeaderSize + svLen
-	if dataStart < len(buf) {
-		r.Data = make([]byte, len(buf)-dataStart)
-		copy(r.Data, buf[dataStart:])
+	if recordHeaderSize < len(buf) {
+		r.Data = make([]byte, len(buf)-recordHeaderSize)
+		copy(r.Data, buf[recordHeaderSize:])
 	}
 
 	return r, nil

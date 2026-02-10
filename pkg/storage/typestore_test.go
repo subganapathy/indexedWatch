@@ -16,17 +16,12 @@ import (
 func testSchema() *schema.Schema {
 	return &schema.Schema{
 		Type:       "events",
-		Version:    "v1",
 		PrimaryKey: "id",
-		Fields: map[string]schema.Field{
-			"id":   {Type: 1, Required: true}, // FIELD_TYPE_STRING
-			"name": {Type: 1},
-		},
 	}
 }
 
-// setupRegistry creates a schema registry with a registered and current schema.
-func setupRegistry(t *testing.T) *schema.Registry {
+// setupRegistry creates a schema registry with a registered schema.
+func setupRegistry(t *testing.T) schema.Registry {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "schema")
 	reg, err := schema.Open(dir)
@@ -36,9 +31,6 @@ func setupRegistry(t *testing.T) *schema.Registry {
 	s := testSchema()
 	if err := reg.Register(s); err != nil {
 		t.Fatalf("register schema: %v", err)
-	}
-	if err := reg.SetCurrent(s.Type, s.Version); err != nil {
-		t.Fatalf("set current: %v", err)
 	}
 	t.Cleanup(func() { reg.Close() })
 	return reg
@@ -56,7 +48,7 @@ func testTypeStoreOpts() TypeStoreOptions {
 }
 
 // openTestTypeStore opens a TypeStore in a temp directory.
-func openTestTypeStore(t *testing.T, reg *schema.Registry) *TypeStore {
+func openTestTypeStore(t *testing.T, reg schema.Registry) *TypeStore {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "types", "events")
 	ts, err := OpenTypeStore(dir, "events", reg, testTypeStoreOpts())
@@ -85,9 +77,6 @@ func TestCreateAndGet(t *testing.T) {
 	}
 	if string(record.Data) != `{"id":"key1","name":"alice"}` {
 		t.Fatalf("unexpected data: %s", record.Data)
-	}
-	if record.SchemaVersion != "v1" {
-		t.Fatalf("unexpected schema version: %s", record.SchemaVersion)
 	}
 	if record.CreateSeqNum != 1 || record.UpdateSeqNum != 1 {
 		t.Fatalf("unexpected seqNums: create=%d update=%d", record.CreateSeqNum, record.UpdateSeqNum)
@@ -550,36 +539,32 @@ func TestStoredRecordMarshalRoundtrip(t *testing.T) {
 		{
 			name: "basic",
 			record: &StoredRecord{
-				Data:          []byte(`{"id":"123","name":"test"}`),
-				SchemaVersion: "v1",
-				CreateSeqNum:  42,
-				UpdateSeqNum:  99,
+				Data:         []byte(`{"id":"123","name":"test"}`),
+				CreateSeqNum: 42,
+				UpdateSeqNum: 99,
 			},
 		},
 		{
 			name: "deleted",
 			record: &StoredRecord{
-				SchemaVersion: "v2",
-				CreateSeqNum:  10,
-				UpdateSeqNum:  20,
-				IsDeleted:     true,
+				CreateSeqNum: 10,
+				UpdateSeqNum: 20,
+				IsDeleted:    true,
 			},
 		},
 		{
 			name: "empty data",
 			record: &StoredRecord{
-				SchemaVersion: "v1",
-				CreateSeqNum:  1,
-				UpdateSeqNum:  1,
+				CreateSeqNum: 1,
+				UpdateSeqNum: 1,
 			},
 		},
 		{
 			name: "large data",
 			record: &StoredRecord{
-				Data:          bytes.Repeat([]byte("x"), 10000),
-				SchemaVersion: "v3-long-version-name",
-				CreateSeqNum:  1 << 40,
-				UpdateSeqNum:  (1 << 40) + 1,
+				Data:         bytes.Repeat([]byte("x"), 10000),
+				CreateSeqNum: 1 << 40,
+				UpdateSeqNum: (1 << 40) + 1,
 			},
 		},
 	}
@@ -593,9 +578,6 @@ func TestStoredRecordMarshalRoundtrip(t *testing.T) {
 			}
 			if !bytes.Equal(got.Data, tt.record.Data) {
 				t.Fatalf("data mismatch")
-			}
-			if got.SchemaVersion != tt.record.SchemaVersion {
-				t.Fatalf("schema version: %s vs %s", got.SchemaVersion, tt.record.SchemaVersion)
 			}
 			if got.CreateSeqNum != tt.record.CreateSeqNum {
 				t.Fatalf("createSeqNum: %d vs %d", got.CreateSeqNum, tt.record.CreateSeqNum)
@@ -621,15 +603,6 @@ func TestStoredRecordUnmarshalErrors(t *testing.T) {
 	buf[0] = 99
 	if _, err := UnmarshalStoredRecord(buf); err == nil {
 		t.Fatal("expected error for unknown version")
-	}
-
-	// Truncated schema version.
-	buf = make([]byte, recordHeaderSize)
-	buf[0] = recordVersion
-	buf[18] = 0
-	buf[19] = 50 // schemaVersion length = 50, but buffer is only recordHeaderSize
-	if _, err := UnmarshalStoredRecord(buf); err == nil {
-		t.Fatal("expected error for truncated schema version")
 	}
 }
 
@@ -765,45 +738,6 @@ func TestStorageManagerClose(t *testing.T) {
 	}
 }
 
-func TestNoSchemaError(t *testing.T) {
-	// Create a registry without setting a current version.
-	dir := filepath.Join(t.TempDir(), "schema")
-	reg, err := schema.Open(dir)
-	if err != nil {
-		t.Fatalf("open registry: %v", err)
-	}
-	defer reg.Close()
-
-	s := &schema.Schema{
-		Type:       "events",
-		Version:    "v1",
-		PrimaryKey: "id",
-		Fields: map[string]schema.Field{
-			"id": {Type: 1, Required: true},
-		},
-	}
-	if err := reg.Register(s); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-	// Don't set current.
-
-	tsDir := filepath.Join(t.TempDir(), "types", "events")
-	ts, err := OpenTypeStore(tsDir, "events", reg, testTypeStoreOpts())
-	if err != nil {
-		t.Fatalf("open type store: %v", err)
-	}
-	defer ts.Close()
-
-	_, err = ts.Create([]byte("key1"), []byte("data1"))
-	if err == nil {
-		t.Fatal("expected error when no current schema")
-	}
-	// Should contain our sentinel error.
-	if !bytes.Contains([]byte(err.Error()), []byte("no current schema")) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestSequentialUpdateChain(t *testing.T) {
 	reg := setupRegistry(t)
 	ts := openTestTypeStore(t, reg)
@@ -849,7 +783,6 @@ func BenchmarkCreate(b *testing.B) {
 
 	s := testSchema()
 	reg.Register(s)
-	reg.SetCurrent(s.Type, s.Version)
 
 	tsDir := filepath.Join(b.TempDir(), "types", "events")
 	ts, err := OpenTypeStore(tsDir, "events", reg, DefaultTypeStoreOptions())
@@ -880,7 +813,6 @@ func BenchmarkGet(b *testing.B) {
 
 	s := testSchema()
 	reg.Register(s)
-	reg.SetCurrent(s.Type, s.Version)
 
 	tsDir := filepath.Join(b.TempDir(), "types", "events")
 	ts, err := OpenTypeStore(tsDir, "events", reg, DefaultTypeStoreOptions())

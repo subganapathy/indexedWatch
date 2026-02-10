@@ -2,7 +2,6 @@ package storage
 
 import (
 	storagev1 "github.com/subganapathy/indexedwatch/gen/go/indexedwatch/storage/v1"
-	"github.com/subganapathy/indexedwatch/pkg/schema"
 )
 
 // AdmissionChecker validates a write operation before it is committed to the WAL.
@@ -29,9 +28,6 @@ type WriteRequest struct {
 	// Existing is the current StoredRecord for this PK in the LSM.
 	// Nil if the record does not exist.
 	Existing *StoredRecord
-
-	// Schema is the current schema version for the resource type.
-	Schema *schema.Schema
 }
 
 // runAdmission runs all checkers in sequence. Returns the first error, or nil.

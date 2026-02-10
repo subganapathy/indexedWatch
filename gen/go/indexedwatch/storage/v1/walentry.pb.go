@@ -93,8 +93,6 @@ type StorageWALEntry struct {
 	// Resource data (opaque to the storage layer).
 	// Empty for DELETE operations.
 	Data []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	// Schema version this write was validated against.
-	SchemaVersion string `protobuf:"bytes,4,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	// For OCC: the expected UpdateSeqNum of the existing record.
 	// Only meaningful for UPDATE and DELETE operations.
 	// Zero means "no expectation" (unconditional write).
@@ -161,13 +159,6 @@ func (x *StorageWALEntry) GetData() []byte {
 	return nil
 }
 
-func (x *StorageWALEntry) GetSchemaVersion() string {
-	if x != nil {
-		return x.SchemaVersion
-	}
-	return ""
-}
-
 func (x *StorageWALEntry) GetExpectedSeqNum() uint64 {
 	if x != nil {
 		return x.ExpectedSeqNum
@@ -193,16 +184,15 @@ var File_indexedwatch_storage_v1_walentry_proto protoreflect.FileDescriptor
 
 const file_indexedwatch_storage_v1_walentry_proto_rawDesc = "" +
 	"\n" +
-	"&indexedwatch/storage/v1/walentry.proto\x12\x17indexedwatch.storage.v1\"\xac\x02\n" +
+	"&indexedwatch/storage/v1/walentry.proto\x12\x17indexedwatch.storage.v1\"\x8b\x02\n" +
 	"\x0fStorageWALEntry\x12G\n" +
 	"\toperation\x18\x01 \x01(\x0e2).indexedwatch.storage.v1.StorageOperationR\toperation\x12\x1f\n" +
 	"\vprimary_key\x18\x02 \x01(\fR\n" +
 	"primaryKey\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\x12%\n" +
-	"\x0eschema_version\x18\x04 \x01(\tR\rschemaVersion\x12(\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12(\n" +
 	"\x10expected_seq_num\x18\x05 \x01(\x04R\x0eexpectedSeqNum\x12$\n" +
 	"\x0ecreate_seq_num\x18\x06 \x01(\x04R\fcreateSeqNum\x12$\n" +
-	"\x0eupdate_seq_num\x18\a \x01(\x04R\fupdateSeqNum*\x8f\x01\n" +
+	"\x0eupdate_seq_num\x18\a \x01(\x04R\fupdateSeqNumJ\x04\b\x04\x10\x05*\x8f\x01\n" +
 	"\x10StorageOperation\x12!\n" +
 	"\x1dSTORAGE_OPERATION_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18STORAGE_OPERATION_CREATE\x10\x01\x12\x1c\n" +

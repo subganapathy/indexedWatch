@@ -61,19 +61,17 @@ func applyEntry(db *lsm.DB, entry *storagev1.StorageWALEntry) error {
 	case storagev1.StorageOperation_STORAGE_OPERATION_CREATE,
 		storagev1.StorageOperation_STORAGE_OPERATION_UPDATE:
 		record := &StoredRecord{
-			Data:          entry.Data,
-			SchemaVersion: entry.SchemaVersion,
-			CreateSeqNum:  entry.CreateSeqNum,
-			UpdateSeqNum:  entry.UpdateSeqNum,
+			Data:         entry.Data,
+			CreateSeqNum: entry.CreateSeqNum,
+			UpdateSeqNum: entry.UpdateSeqNum,
 		}
 		return db.Set(entry.PrimaryKey, record.Marshal())
 
 	case storagev1.StorageOperation_STORAGE_OPERATION_DELETE:
 		record := &StoredRecord{
-			IsDeleted:     true,
-			SchemaVersion: entry.SchemaVersion,
-			CreateSeqNum:  entry.CreateSeqNum,
-			UpdateSeqNum:  entry.UpdateSeqNum,
+			IsDeleted:    true,
+			CreateSeqNum: entry.CreateSeqNum,
+			UpdateSeqNum: entry.UpdateSeqNum,
 		}
 		return db.Set(entry.PrimaryKey, record.Marshal())
 

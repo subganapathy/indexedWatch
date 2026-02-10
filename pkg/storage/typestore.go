@@ -57,7 +57,7 @@ type TypeStore struct {
 	dir      string
 	w        walAppender
 	db       *lsm.DB
-	registry *schema.Registry
+	registry schema.Registry
 	checkers []AdmissionChecker
 
 	// seqNum is the storage-level sequence number, separate from LSM's internal seqNum.
@@ -76,7 +76,7 @@ type TypeStore struct {
 //	dir/
 //	  wal/   — per-type resource WAL
 //	  lsm/   — Primary LSM
-func OpenTypeStore(dir, typeName string, registry *schema.Registry, opts TypeStoreOptions) (*TypeStore, error) {
+func OpenTypeStore(dir, typeName string, reg schema.Registry, opts TypeStoreOptions) (*TypeStore, error) {
 	if opts.WALOptions == (wal.Options{}) {
 		opts.WALOptions = wal.ResourceOptions()
 	}
@@ -100,7 +100,7 @@ func OpenTypeStore(dir, typeName string, registry *schema.Registry, opts TypeSto
 		dir:      dir,
 		w:        w,
 		db:       db,
-		registry: registry,
+		registry: reg,
 		checkers: defaultCheckers(),
 	}
 
@@ -126,12 +126,6 @@ func (ts *TypeStore) Create(pk, data []byte) (uint64, error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	// Resolve current schema.
-	currentSchema, err := ts.currentSchema()
-	if err != nil {
-		return 0, err
-	}
-
 	// Read existing record for admission.
 	existing := ts.getRecordOrNil(pk)
 
@@ -141,7 +135,6 @@ func (ts *TypeStore) Create(pk, data []byte) (uint64, error) {
 		PrimaryKey: pk,
 		Data:       data,
 		Existing:   existing,
-		Schema:     currentSchema,
 	}
 	if err := runAdmission(ts.checkers, req); err != nil {
 		return 0, err
@@ -151,12 +144,11 @@ func (ts *TypeStore) Create(pk, data []byte) (uint64, error) {
 
 	// Build and persist WAL entry.
 	entry := &storagev1.StorageWALEntry{
-		Operation:     storagev1.StorageOperation_STORAGE_OPERATION_CREATE,
-		PrimaryKey:    pk,
-		Data:          data,
-		SchemaVersion: currentSchema.Version,
-		CreateSeqNum:  seqNum,
-		UpdateSeqNum:  seqNum,
+		Operation:    storagev1.StorageOperation_STORAGE_OPERATION_CREATE,
+		PrimaryKey:   pk,
+		Data:         data,
+		CreateSeqNum: seqNum,
+		UpdateSeqNum: seqNum,
 	}
 	if err := ts.writeWAL(entry); err != nil {
 		return 0, err
@@ -164,10 +156,9 @@ func (ts *TypeStore) Create(pk, data []byte) (uint64, error) {
 
 	// Apply to LSM.
 	record := &StoredRecord{
-		Data:          data,
-		SchemaVersion: currentSchema.Version,
-		CreateSeqNum:  seqNum,
-		UpdateSeqNum:  seqNum,
+		Data:         data,
+		CreateSeqNum: seqNum,
+		UpdateSeqNum: seqNum,
 	}
 	if err := ts.db.Set(pk, record.Marshal()); err != nil {
 		return 0, fmt.Errorf("storage: LSM set: %w", err)
@@ -187,11 +178,6 @@ func (ts *TypeStore) Update(pk, data []byte, expectedSeqNum uint64) (uint64, err
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	currentSchema, err := ts.currentSchema()
-	if err != nil {
-		return 0, err
-	}
-
 	existing := ts.getRecordOrNil(pk)
 
 	req := &WriteRequest{
@@ -200,7 +186,6 @@ func (ts *TypeStore) Update(pk, data []byte, expectedSeqNum uint64) (uint64, err
 		Data:           data,
 		ExpectedSeqNum: expectedSeqNum,
 		Existing:       existing,
-		Schema:         currentSchema,
 	}
 	if err := runAdmission(ts.checkers, req); err != nil {
 		return 0, err
@@ -212,7 +197,6 @@ func (ts *TypeStore) Update(pk, data []byte, expectedSeqNum uint64) (uint64, err
 		Operation:      storagev1.StorageOperation_STORAGE_OPERATION_UPDATE,
 		PrimaryKey:     pk,
 		Data:           data,
-		SchemaVersion:  currentSchema.Version,
 		ExpectedSeqNum: expectedSeqNum,
 		CreateSeqNum:   existing.CreateSeqNum,
 		UpdateSeqNum:   seqNum,
@@ -222,10 +206,9 @@ func (ts *TypeStore) Update(pk, data []byte, expectedSeqNum uint64) (uint64, err
 	}
 
 	record := &StoredRecord{
-		Data:          data,
-		SchemaVersion: currentSchema.Version,
-		CreateSeqNum:  existing.CreateSeqNum,
-		UpdateSeqNum:  seqNum,
+		Data:         data,
+		CreateSeqNum: existing.CreateSeqNum,
+		UpdateSeqNum: seqNum,
 	}
 	if err := ts.db.Set(pk, record.Marshal()); err != nil {
 		return 0, fmt.Errorf("storage: LSM set: %w", err)
@@ -247,12 +230,6 @@ func (ts *TypeStore) Delete(pk []byte, expectedSeqNum uint64) (uint64, error) {
 
 	existing := ts.getRecordOrNil(pk)
 
-	// Use the existing schema version for the delete record, or empty if no schema.
-	var schemaVersion string
-	if existing != nil {
-		schemaVersion = existing.SchemaVersion
-	}
-
 	req := &WriteRequest{
 		Operation:      storagev1.StorageOperation_STORAGE_OPERATION_DELETE,
 		PrimaryKey:     pk,
@@ -268,7 +245,6 @@ func (ts *TypeStore) Delete(pk []byte, expectedSeqNum uint64) (uint64, error) {
 	entry := &storagev1.StorageWALEntry{
 		Operation:      storagev1.StorageOperation_STORAGE_OPERATION_DELETE,
 		PrimaryKey:     pk,
-		SchemaVersion:  schemaVersion,
 		ExpectedSeqNum: expectedSeqNum,
 		CreateSeqNum:   existing.CreateSeqNum,
 		UpdateSeqNum:   seqNum,
@@ -279,10 +255,9 @@ func (ts *TypeStore) Delete(pk []byte, expectedSeqNum uint64) (uint64, error) {
 
 	// Logical delete: store tombstone with IsDeleted=true.
 	record := &StoredRecord{
-		IsDeleted:     true,
-		SchemaVersion: schemaVersion,
-		CreateSeqNum:  existing.CreateSeqNum,
-		UpdateSeqNum:  seqNum,
+		IsDeleted:    true,
+		CreateSeqNum: existing.CreateSeqNum,
+		UpdateSeqNum: seqNum,
 	}
 	if err := ts.db.Set(pk, record.Marshal()); err != nil {
 		return 0, fmt.Errorf("storage: LSM set: %w", err)
@@ -390,9 +365,9 @@ func (ts *TypeStore) Close() error {
 
 // --- Internal helpers ---
 
-// currentSchema returns the current schema version for this type.
+// currentSchema returns the schema definition for this type.
 func (ts *TypeStore) currentSchema() (*schema.Schema, error) {
-	s, err := ts.registry.GetCurrent(ts.typeName)
+	s, err := ts.registry.Get(ts.typeName)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrNoSchema, ts.typeName, err)
 	}

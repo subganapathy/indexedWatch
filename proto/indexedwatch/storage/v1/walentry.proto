@@ -22,8 +22,8 @@ message StorageWALEntry {
   // Empty for DELETE operations.
   bytes data = 3;
 
-  // Schema version this write was validated against.
-  string schema_version = 4;
+  // Reserved: was schema_version (removed — schema has no versions).
+  reserved 4;
 
   // For OCC: the expected UpdateSeqNum of the existing record.
   // Only meaningful for UPDATE and DELETE operations.
