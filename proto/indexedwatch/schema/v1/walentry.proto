@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package indexedwatch.schema.v1;
+
+option go_package = "github.com/subganapathy/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1";
+
+import "indexedwatch/schema/v1/schema.proto";
+
+// SchemaWALEntry is persisted as opaque bytes in the WAL's DataType records.
+// Each entry represents a single schema operation that, when replayed in order,
+// materializes the full schema registry state.
+message SchemaWALEntry {
+  SchemaOperation operation = 1;
+
+  // For REGISTER: the full schema definition (type + PK + initial SKs).
+  SchemaDefinition schema = 2;
+
+  // For ADD_INDEX / REMOVE_INDEX: the target type and index path.
+  string type = 3;
+  string index_path = 4;
+}
+
+// SchemaOperation enumerates the operations that can be recorded in the schema WAL.
+enum SchemaOperation {
+  SCHEMA_OPERATION_UNSPECIFIED = 0;
+
+  // Register a new resource type with its primary key and initial secondary indexes.
+  SCHEMA_OPERATION_REGISTER = 1;
+
+  // Add a secondary index to an existing type.
+  SCHEMA_OPERATION_ADD_INDEX = 2;
+
+  // Remove a secondary index from an existing type.
+  SCHEMA_OPERATION_REMOVE_INDEX = 3;
+}
