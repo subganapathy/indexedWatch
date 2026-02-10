@@ -26,12 +26,12 @@ type SchemaOperation int32
 
 const (
 	SchemaOperation_SCHEMA_OPERATION_UNSPECIFIED SchemaOperation = 0
-	// Register a new schema version for a type.
+	// Register a new resource type with its primary key and initial secondary indexes.
 	SchemaOperation_SCHEMA_OPERATION_REGISTER SchemaOperation = 1
-	// Update an existing schema version in place (backwards-compatible changes).
-	SchemaOperation_SCHEMA_OPERATION_UPDATE SchemaOperation = 2
-	// Set the current (active) version for a type.
-	SchemaOperation_SCHEMA_OPERATION_SET_CURRENT SchemaOperation = 3
+	// Add a secondary index to an existing type.
+	SchemaOperation_SCHEMA_OPERATION_ADD_INDEX SchemaOperation = 2
+	// Remove a secondary index from an existing type.
+	SchemaOperation_SCHEMA_OPERATION_REMOVE_INDEX SchemaOperation = 3
 )
 
 // Enum value maps for SchemaOperation.
@@ -39,14 +39,14 @@ var (
 	SchemaOperation_name = map[int32]string{
 		0: "SCHEMA_OPERATION_UNSPECIFIED",
 		1: "SCHEMA_OPERATION_REGISTER",
-		2: "SCHEMA_OPERATION_UPDATE",
-		3: "SCHEMA_OPERATION_SET_CURRENT",
+		2: "SCHEMA_OPERATION_ADD_INDEX",
+		3: "SCHEMA_OPERATION_REMOVE_INDEX",
 	}
 	SchemaOperation_value = map[string]int32{
-		"SCHEMA_OPERATION_UNSPECIFIED": 0,
-		"SCHEMA_OPERATION_REGISTER":    1,
-		"SCHEMA_OPERATION_UPDATE":      2,
-		"SCHEMA_OPERATION_SET_CURRENT": 3,
+		"SCHEMA_OPERATION_UNSPECIFIED":  0,
+		"SCHEMA_OPERATION_REGISTER":     1,
+		"SCHEMA_OPERATION_ADD_INDEX":    2,
+		"SCHEMA_OPERATION_REMOVE_INDEX": 3,
 	}
 )
 
@@ -83,11 +83,11 @@ func (SchemaOperation) EnumDescriptor() ([]byte, []int) {
 type SchemaWALEntry struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Operation SchemaOperation        `protobuf:"varint,1,opt,name=operation,proto3,enum=indexedwatch.schema.v1.SchemaOperation" json:"operation,omitempty"`
-	// For REGISTER and UPDATE: the full schema definition.
-	Schema *SchemaVersion `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
-	// For SET_CURRENT: just the type and target version.
+	// For REGISTER: the full schema definition (type + PK + initial SKs).
+	Schema *SchemaDefinition `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
+	// For ADD_INDEX / REMOVE_INDEX: the target type and index path.
 	Type          string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Version       string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	IndexPath     string `protobuf:"bytes,4,opt,name=index_path,json=indexPath,proto3" json:"index_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -129,7 +129,7 @@ func (x *SchemaWALEntry) GetOperation() SchemaOperation {
 	return SchemaOperation_SCHEMA_OPERATION_UNSPECIFIED
 }
 
-func (x *SchemaWALEntry) GetSchema() *SchemaVersion {
+func (x *SchemaWALEntry) GetSchema() *SchemaDefinition {
 	if x != nil {
 		return x.Schema
 	}
@@ -143,9 +143,9 @@ func (x *SchemaWALEntry) GetType() string {
 	return ""
 }
 
-func (x *SchemaWALEntry) GetVersion() string {
+func (x *SchemaWALEntry) GetIndexPath() string {
 	if x != nil {
-		return x.Version
+		return x.IndexPath
 	}
 	return ""
 }
@@ -154,17 +154,18 @@ var File_indexedwatch_schema_v1_walentry_proto protoreflect.FileDescriptor
 
 const file_indexedwatch_schema_v1_walentry_proto_rawDesc = "" +
 	"\n" +
-	"%indexedwatch/schema/v1/walentry.proto\x12\x16indexedwatch.schema.v1\x1a#indexedwatch/schema/v1/schema.proto\"\xc4\x01\n" +
+	"%indexedwatch/schema/v1/walentry.proto\x12\x16indexedwatch.schema.v1\x1a#indexedwatch/schema/v1/schema.proto\"\xcc\x01\n" +
 	"\x0eSchemaWALEntry\x12E\n" +
-	"\toperation\x18\x01 \x01(\x0e2'.indexedwatch.schema.v1.SchemaOperationR\toperation\x12=\n" +
-	"\x06schema\x18\x02 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\x06schema\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\tR\aversion*\x91\x01\n" +
+	"\toperation\x18\x01 \x01(\x0e2'.indexedwatch.schema.v1.SchemaOperationR\toperation\x12@\n" +
+	"\x06schema\x18\x02 \x01(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\x06schema\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1d\n" +
+	"\n" +
+	"index_path\x18\x04 \x01(\tR\tindexPath*\x95\x01\n" +
 	"\x0fSchemaOperation\x12 \n" +
 	"\x1cSCHEMA_OPERATION_UNSPECIFIED\x10\x00\x12\x1d\n" +
-	"\x19SCHEMA_OPERATION_REGISTER\x10\x01\x12\x1b\n" +
-	"\x17SCHEMA_OPERATION_UPDATE\x10\x02\x12 \n" +
-	"\x1cSCHEMA_OPERATION_SET_CURRENT\x10\x03B\xf2\x01\n" +
+	"\x19SCHEMA_OPERATION_REGISTER\x10\x01\x12\x1e\n" +
+	"\x1aSCHEMA_OPERATION_ADD_INDEX\x10\x02\x12!\n" +
+	"\x1dSCHEMA_OPERATION_REMOVE_INDEX\x10\x03B\xf2\x01\n" +
 	"\x1acom.indexedwatch.schema.v1B\rWalentryProtoP\x01ZKgithub.com/subganapathy/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1\xa2\x02\x03ISX\xaa\x02\x16Indexedwatch.Schema.V1\xca\x02\x16Indexedwatch\\Schema\\V1\xe2\x02\"Indexedwatch\\Schema\\V1\\GPBMetadata\xea\x02\x18Indexedwatch::Schema::V1b\x06proto3"
 
 var (
@@ -182,13 +183,13 @@ func file_indexedwatch_schema_v1_walentry_proto_rawDescGZIP() []byte {
 var file_indexedwatch_schema_v1_walentry_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_indexedwatch_schema_v1_walentry_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_indexedwatch_schema_v1_walentry_proto_goTypes = []any{
-	(SchemaOperation)(0),   // 0: indexedwatch.schema.v1.SchemaOperation
-	(*SchemaWALEntry)(nil), // 1: indexedwatch.schema.v1.SchemaWALEntry
-	(*SchemaVersion)(nil),  // 2: indexedwatch.schema.v1.SchemaVersion
+	(SchemaOperation)(0),     // 0: indexedwatch.schema.v1.SchemaOperation
+	(*SchemaWALEntry)(nil),   // 1: indexedwatch.schema.v1.SchemaWALEntry
+	(*SchemaDefinition)(nil), // 2: indexedwatch.schema.v1.SchemaDefinition
 }
 var file_indexedwatch_schema_v1_walentry_proto_depIdxs = []int32{
 	0, // 0: indexedwatch.schema.v1.SchemaWALEntry.operation:type_name -> indexedwatch.schema.v1.SchemaOperation
-	2, // 1: indexedwatch.schema.v1.SchemaWALEntry.schema:type_name -> indexedwatch.schema.v1.SchemaVersion
+	2, // 1: indexedwatch.schema.v1.SchemaWALEntry.schema:type_name -> indexedwatch.schema.v1.SchemaDefinition
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

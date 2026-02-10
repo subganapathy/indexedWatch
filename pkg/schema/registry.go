@@ -8,16 +8,15 @@ import (
 	"github.com/subganapathy/indexedwatch/pkg/wal"
 )
 
-// typeState holds all versions and the current version pointer for a single type.
+// typeState holds the mutable schema for a single registered type.
 type typeState struct {
-	versions map[string]*Schema // version → Schema
-	current  string             // current version name (empty if unset)
+	schema *Schema
 }
 
 // Registry is a WAL-backed, in-memory schema registry.
 //
-// All mutations (Register, Update, SetCurrent) are persisted to a WAL before
-// updating in-memory state. On startup, the WAL is replayed via Recover to
+// All mutations (Register, AddIndex, RemoveIndex) are persisted to a WAL before
+// updating in-memory state. On startup, the WAL is replayed via recover to
 // materialize the full registry state.
 //
 // Reads are lock-free via sync.RWMutex (read-heavy, write-rare workload).
@@ -50,9 +49,9 @@ func Open(dir string) (*Registry, error) {
 	return r, nil
 }
 
-// Register persists a new schema version to the WAL and adds it to the registry.
-// Fails if the version already exists for this type.
-// Does NOT set the version as current — use SetCurrent for that.
+// Register persists a new schema definition to the WAL and adds it to the registry.
+// Fails if the type already exists — Register is a one-time operation per type.
+// Use AddIndex/RemoveIndex to evolve the index set.
 func (r *Registry) Register(s *Schema) error {
 	if err := s.Validate(); err != nil {
 		return err
@@ -65,11 +64,8 @@ func (r *Registry) Register(s *Schema) error {
 		return ErrRegistryClosed
 	}
 
-	ts := r.types[s.Type]
-	if ts != nil {
-		if _, exists := ts.versions[s.Version]; exists {
-			return fmt.Errorf("%w: %s/%s", ErrVersionExists, s.Type, s.Version)
-		}
+	if _, exists := r.types[s.Type]; exists {
+		return fmt.Errorf("%w: %s", ErrTypeExists, s.Type)
 	}
 
 	data, err := marshalRegister(s)
@@ -88,56 +84,14 @@ func (r *Registry) Register(s *Schema) error {
 	return nil
 }
 
-// Update persists an updated schema version to the WAL and applies it.
-// The type and version must already exist. Evolution rules are enforced:
-//   - Primary key cannot change
-//   - Existing field types cannot change
-//   - New required fields must have a default value
-func (r *Registry) Update(s *Schema) error {
-	if err := s.Validate(); err != nil {
-		return err
+// AddIndex adds a secondary index to an existing type.
+// Persists an ADD_INDEX entry to the WAL, then updates in-memory state.
+// Returns ErrIndexExists if the index already exists on this type.
+func (r *Registry) AddIndex(typeName, indexPath string) error {
+	if indexPath == "" {
+		return fmt.Errorf("%w: index path cannot be empty", ErrInvalidSchema)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.closed {
-		return ErrRegistryClosed
-	}
-
-	ts := r.types[s.Type]
-	if ts == nil {
-		return fmt.Errorf("%w: %s", ErrTypeNotFound, s.Type)
-	}
-
-	prev, exists := ts.versions[s.Version]
-	if !exists {
-		return fmt.Errorf("%w: %s/%s", ErrVersionNotFound, s.Type, s.Version)
-	}
-
-	if err := ValidateEvolution(prev, s); err != nil {
-		return err
-	}
-
-	data, err := marshalUpdate(s)
-	if err != nil {
-		return fmt.Errorf("schema: failed to marshal update entry: %w", err)
-	}
-
-	if _, err := r.w.Append(data); err != nil {
-		return fmt.Errorf("schema: failed to append to WAL: %w", err)
-	}
-	if err := r.w.Sync(); err != nil {
-		return fmt.Errorf("schema: failed to sync WAL: %w", err)
-	}
-
-	r.applyUpdate(s)
-	return nil
-}
-
-// SetCurrent sets the active version for a type. The type and version must exist.
-// All new resource writes are validated against the current schema version.
-func (r *Registry) SetCurrent(typeName, version string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -149,13 +103,18 @@ func (r *Registry) SetCurrent(typeName, version string) error {
 	if ts == nil {
 		return fmt.Errorf("%w: %s", ErrTypeNotFound, typeName)
 	}
-	if _, exists := ts.versions[version]; !exists {
-		return fmt.Errorf("%w: %s/%s", ErrVersionNotFound, typeName, version)
+
+	if ts.schema.HasIndex(indexPath) {
+		return fmt.Errorf("%w: %s on %s", ErrIndexExists, indexPath, typeName)
 	}
 
-	data, err := marshalSetCurrent(typeName, version)
+	if indexPath == ts.schema.PrimaryKey {
+		return fmt.Errorf("%w: cannot add primary key as secondary index", ErrInvalidSchema)
+	}
+
+	data, err := marshalAddIndex(typeName, indexPath)
 	if err != nil {
-		return fmt.Errorf("schema: failed to marshal set-current entry: %w", err)
+		return fmt.Errorf("schema: failed to marshal add-index entry: %w", err)
 	}
 
 	if _, err := r.w.Append(data); err != nil {
@@ -165,35 +124,48 @@ func (r *Registry) SetCurrent(typeName, version string) error {
 		return fmt.Errorf("schema: failed to sync WAL: %w", err)
 	}
 
-	ts.current = version
+	r.applyAddIndex(typeName, indexPath)
 	return nil
 }
 
-// Get returns a specific schema version. Returns ErrTypeNotFound or
-// ErrVersionNotFound if the type or version does not exist.
-func (r *Registry) Get(typeName, version string) (*Schema, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+// RemoveIndex removes a secondary index from an existing type.
+// Persists a REMOVE_INDEX entry to the WAL, then updates in-memory state.
+// Returns ErrIndexNotFound if the index doesn't exist on this type.
+func (r *Registry) RemoveIndex(typeName, indexPath string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	if r.closed {
-		return nil, ErrRegistryClosed
+		return ErrRegistryClosed
 	}
 
 	ts := r.types[typeName]
 	if ts == nil {
-		return nil, fmt.Errorf("%w: %s", ErrTypeNotFound, typeName)
+		return fmt.Errorf("%w: %s", ErrTypeNotFound, typeName)
 	}
 
-	s, exists := ts.versions[version]
-	if !exists {
-		return nil, fmt.Errorf("%w: %s/%s", ErrVersionNotFound, typeName, version)
+	if !ts.schema.HasIndex(indexPath) {
+		return fmt.Errorf("%w: %s on %s", ErrIndexNotFound, indexPath, typeName)
 	}
 
-	return s, nil
+	data, err := marshalRemoveIndex(typeName, indexPath)
+	if err != nil {
+		return fmt.Errorf("schema: failed to marshal remove-index entry: %w", err)
+	}
+
+	if _, err := r.w.Append(data); err != nil {
+		return fmt.Errorf("schema: failed to append to WAL: %w", err)
+	}
+	if err := r.w.Sync(); err != nil {
+		return fmt.Errorf("schema: failed to sync WAL: %w", err)
+	}
+
+	r.applyRemoveIndex(typeName, indexPath)
+	return nil
 }
 
-// GetCurrent returns the current (active) schema version for a type.
-func (r *Registry) GetCurrent(typeName string) (*Schema, error) {
+// Get returns the current schema definition for a type.
+func (r *Registry) Get(typeName string) (*Schema, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -206,11 +178,7 @@ func (r *Registry) GetCurrent(typeName string) (*Schema, error) {
 		return nil, fmt.Errorf("%w: %s", ErrTypeNotFound, typeName)
 	}
 
-	if ts.current == "" {
-		return nil, fmt.Errorf("%w: %s", ErrNoCurrentVersion, typeName)
-	}
-
-	return ts.versions[ts.current], nil
+	return ts.schema, nil
 }
 
 // ListTypes returns the names of all registered schema types.
@@ -223,23 +191,6 @@ func (r *Registry) ListTypes() []string {
 		types = append(types, t)
 	}
 	return types
-}
-
-// ListVersions returns all version names for a type, or ErrTypeNotFound.
-func (r *Registry) ListVersions(typeName string) ([]string, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	ts := r.types[typeName]
-	if ts == nil {
-		return nil, fmt.Errorf("%w: %s", ErrTypeNotFound, typeName)
-	}
-
-	versions := make([]string, 0, len(ts.versions))
-	for v := range ts.versions {
-		versions = append(versions, v)
-	}
-	return versions, nil
 }
 
 // Close closes the underlying WAL and marks the registry as closed.
@@ -277,20 +228,11 @@ func (r *Registry) recover() error {
 			}
 			r.applyRegister(s)
 
-		case schemav1.SchemaOperation_SCHEMA_OPERATION_UPDATE:
-			s := FromProto(entry.GetSchema())
-			if s == nil {
-				return fmt.Errorf("schema: nil schema in UPDATE entry %d", i)
-			}
-			r.applyUpdate(s)
+		case schemav1.SchemaOperation_SCHEMA_OPERATION_ADD_INDEX:
+			r.applyAddIndex(entry.GetType(), entry.GetIndexPath())
 
-		case schemav1.SchemaOperation_SCHEMA_OPERATION_SET_CURRENT:
-			typeName := entry.GetType()
-			version := entry.GetVersion()
-			ts := r.types[typeName]
-			if ts != nil {
-				ts.current = version
-			}
+		case schemav1.SchemaOperation_SCHEMA_OPERATION_REMOVE_INDEX:
+			r.applyRemoveIndex(entry.GetType(), entry.GetIndexPath())
 
 		default:
 			return fmt.Errorf("schema: unknown operation %d in entry %d", entry.GetOperation(), i)
@@ -300,26 +242,43 @@ func (r *Registry) recover() error {
 	return nil
 }
 
-// applyRegister adds a schema to the in-memory state. Caller must hold w.mu.
+// applyRegister adds a schema to the in-memory state.
 func (r *Registry) applyRegister(s *Schema) {
-	ts := r.types[s.Type]
-	if ts == nil {
-		ts = &typeState{
-			versions: make(map[string]*Schema),
-		}
-		r.types[s.Type] = ts
+	// Deep copy the schema to prevent external mutation.
+	indexes := make([]string, len(s.SecondaryIndexes))
+	copy(indexes, s.SecondaryIndexes)
+
+	r.types[s.Type] = &typeState{
+		schema: &Schema{
+			Type:             s.Type,
+			PrimaryKey:       s.PrimaryKey,
+			SecondaryIndexes: indexes,
+		},
 	}
-	ts.versions[s.Version] = s
 }
 
-// applyUpdate replaces a schema version in-memory. Caller must hold w.mu.
-func (r *Registry) applyUpdate(s *Schema) {
-	ts := r.types[s.Type]
+// applyAddIndex appends an index to a type's secondary index list.
+func (r *Registry) applyAddIndex(typeName, indexPath string) {
+	ts := r.types[typeName]
 	if ts == nil {
-		ts = &typeState{
-			versions: make(map[string]*Schema),
-		}
-		r.types[s.Type] = ts
+		return // type not found during replay — skip
 	}
-	ts.versions[s.Version] = s
+	if !ts.schema.HasIndex(indexPath) {
+		ts.schema.SecondaryIndexes = append(ts.schema.SecondaryIndexes, indexPath)
+	}
+}
+
+// applyRemoveIndex removes an index from a type's secondary index list.
+func (r *Registry) applyRemoveIndex(typeName, indexPath string) {
+	ts := r.types[typeName]
+	if ts == nil {
+		return // type not found during replay — skip
+	}
+	filtered := ts.schema.SecondaryIndexes[:0]
+	for _, idx := range ts.schema.SecondaryIndexes {
+		if idx != indexPath {
+			filtered = append(filtered, idx)
+		}
+	}
+	ts.schema.SecondaryIndexes = filtered
 }

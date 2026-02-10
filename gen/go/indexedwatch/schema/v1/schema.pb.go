@@ -9,7 +9,6 @@ package schemav1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -22,185 +21,29 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// FieldType enumerates the supported field types.
-type FieldType int32
-
-const (
-	FieldType_FIELD_TYPE_UNSPECIFIED FieldType = 0
-	// String value (UTF-8).
-	FieldType_FIELD_TYPE_STRING FieldType = 1
-	// 64-bit signed integer.
-	FieldType_FIELD_TYPE_INT64 FieldType = 2
-	// 64-bit floating point.
-	FieldType_FIELD_TYPE_DOUBLE FieldType = 3
-	// Boolean value.
-	FieldType_FIELD_TYPE_BOOL FieldType = 4
-	// Raw bytes.
-	FieldType_FIELD_TYPE_BYTES FieldType = 5
-	// RFC 3339 timestamp string.
-	FieldType_FIELD_TYPE_TIMESTAMP FieldType = 6
-	// JSON object (nested structure).
-	// Nested fields can be indexed using dot notation in secondary_indexes.
-	FieldType_FIELD_TYPE_OBJECT FieldType = 7
-	// JSON array (not indexed).
-	FieldType_FIELD_TYPE_ARRAY FieldType = 8
-)
-
-// Enum value maps for FieldType.
-var (
-	FieldType_name = map[int32]string{
-		0: "FIELD_TYPE_UNSPECIFIED",
-		1: "FIELD_TYPE_STRING",
-		2: "FIELD_TYPE_INT64",
-		3: "FIELD_TYPE_DOUBLE",
-		4: "FIELD_TYPE_BOOL",
-		5: "FIELD_TYPE_BYTES",
-		6: "FIELD_TYPE_TIMESTAMP",
-		7: "FIELD_TYPE_OBJECT",
-		8: "FIELD_TYPE_ARRAY",
-	}
-	FieldType_value = map[string]int32{
-		"FIELD_TYPE_UNSPECIFIED": 0,
-		"FIELD_TYPE_STRING":      1,
-		"FIELD_TYPE_INT64":       2,
-		"FIELD_TYPE_DOUBLE":      3,
-		"FIELD_TYPE_BOOL":        4,
-		"FIELD_TYPE_BYTES":       5,
-		"FIELD_TYPE_TIMESTAMP":   6,
-		"FIELD_TYPE_OBJECT":      7,
-		"FIELD_TYPE_ARRAY":       8,
-	}
-)
-
-func (x FieldType) Enum() *FieldType {
-	p := new(FieldType)
-	*p = x
-	return p
-}
-
-func (x FieldType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (FieldType) Descriptor() protoreflect.EnumDescriptor {
-	return file_indexedwatch_schema_v1_schema_proto_enumTypes[0].Descriptor()
-}
-
-func (FieldType) Type() protoreflect.EnumType {
-	return &file_indexedwatch_schema_v1_schema_proto_enumTypes[0]
-}
-
-func (x FieldType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use FieldType.Descriptor instead.
-func (FieldType) EnumDescriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{0}
-}
-
-// EvolutionViolation enumerates schema evolution rule violations.
-type EvolutionViolation int32
-
-const (
-	EvolutionViolation_EVOLUTION_VIOLATION_UNSPECIFIED EvolutionViolation = 0
-	// Attempted to change the primary key.
-	EvolutionViolation_EVOLUTION_VIOLATION_PRIMARY_KEY_CHANGED EvolutionViolation = 1
-	// Attempted to change a field's type.
-	EvolutionViolation_EVOLUTION_VIOLATION_FIELD_TYPE_CHANGED EvolutionViolation = 2
-	// Added a required field without a default value.
-	EvolutionViolation_EVOLUTION_VIOLATION_REQUIRED_FIELD_NO_DEFAULT EvolutionViolation = 3
-	// Attempted to rename a field (use add + deprecate instead).
-	EvolutionViolation_EVOLUTION_VIOLATION_FIELD_RENAMED EvolutionViolation = 4
-)
-
-// Enum value maps for EvolutionViolation.
-var (
-	EvolutionViolation_name = map[int32]string{
-		0: "EVOLUTION_VIOLATION_UNSPECIFIED",
-		1: "EVOLUTION_VIOLATION_PRIMARY_KEY_CHANGED",
-		2: "EVOLUTION_VIOLATION_FIELD_TYPE_CHANGED",
-		3: "EVOLUTION_VIOLATION_REQUIRED_FIELD_NO_DEFAULT",
-		4: "EVOLUTION_VIOLATION_FIELD_RENAMED",
-	}
-	EvolutionViolation_value = map[string]int32{
-		"EVOLUTION_VIOLATION_UNSPECIFIED":               0,
-		"EVOLUTION_VIOLATION_PRIMARY_KEY_CHANGED":       1,
-		"EVOLUTION_VIOLATION_FIELD_TYPE_CHANGED":        2,
-		"EVOLUTION_VIOLATION_REQUIRED_FIELD_NO_DEFAULT": 3,
-		"EVOLUTION_VIOLATION_FIELD_RENAMED":             4,
-	}
-)
-
-func (x EvolutionViolation) Enum() *EvolutionViolation {
-	p := new(EvolutionViolation)
-	*p = x
-	return p
-}
-
-func (x EvolutionViolation) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (EvolutionViolation) Descriptor() protoreflect.EnumDescriptor {
-	return file_indexedwatch_schema_v1_schema_proto_enumTypes[1].Descriptor()
-}
-
-func (EvolutionViolation) Type() protoreflect.EnumType {
-	return &file_indexedwatch_schema_v1_schema_proto_enumTypes[1]
-}
-
-func (x EvolutionViolation) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use EvolutionViolation.Descriptor instead.
-func (EvolutionViolation) EnumDescriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{1}
-}
-
-// RegisterSchemaVersionRequest registers a new version of a schema type.
-type RegisterSchemaVersionRequest struct {
+// RegisterSchemaRequest creates a new resource type.
+type RegisterSchemaRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema definition as a JSON string.
-	// Using JSON allows schemas to be version-controlled and deployed via CI/CD.
-	//
-	// Example:
-	//
-	//	{
-	//	  "type": "events",
-	//	  "version": "v1",
-	//	  "primaryKey": "id",
-	//	  "secondaryIndexes": ["user_id", "metadata.region"],
-	//	  "fields": {
-	//	    "id": {"type": "string", "required": true},
-	//	    "user_id": {"type": "string", "required": true},
-	//	    "metadata": {"type": "object"}
-	//	  }
-	//	}
-	//
-	// Secondary indexes support dot notation for nested fields (e.g., "metadata.region").
-	// Type and version are parsed from the JSON - no separate fields needed.
-	// Fails if this version already exists for the type.
-	SchemaJson    string `protobuf:"bytes,1,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
+	// The schema definition to register.
+	Schema        *SchemaDefinition `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RegisterSchemaVersionRequest) Reset() {
-	*x = RegisterSchemaVersionRequest{}
+func (x *RegisterSchemaRequest) Reset() {
+	*x = RegisterSchemaRequest{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RegisterSchemaVersionRequest) String() string {
+func (x *RegisterSchemaRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RegisterSchemaVersionRequest) ProtoMessage() {}
+func (*RegisterSchemaRequest) ProtoMessage() {}
 
-func (x *RegisterSchemaVersionRequest) ProtoReflect() protoreflect.Message {
+func (x *RegisterSchemaRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -212,89 +55,90 @@ func (x *RegisterSchemaVersionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterSchemaVersionRequest.ProtoReflect.Descriptor instead.
-func (*RegisterSchemaVersionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RegisterSchemaRequest.ProtoReflect.Descriptor instead.
+func (*RegisterSchemaRequest) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RegisterSchemaVersionRequest) GetSchemaJson() string {
+func (x *RegisterSchemaRequest) GetSchema() *SchemaDefinition {
 	if x != nil {
-		return x.SchemaJson
-	}
-	return ""
-}
-
-type RegisterSchemaVersionResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The registered schema version with server-assigned metadata.
-	SchemaVersion *SchemaVersion `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RegisterSchemaVersionResponse) Reset() {
-	*x = RegisterSchemaVersionResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RegisterSchemaVersionResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RegisterSchemaVersionResponse) ProtoMessage() {}
-
-func (x *RegisterSchemaVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RegisterSchemaVersionResponse.ProtoReflect.Descriptor instead.
-func (*RegisterSchemaVersionResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *RegisterSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
-	if x != nil {
-		return x.SchemaVersion
+		return x.Schema
 	}
 	return nil
 }
 
-// UpdateSchemaVersionRequest updates an existing version in place.
-type UpdateSchemaVersionRequest struct {
+type RegisterSchemaResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The updated schema definition as a JSON string.
-	// Type and version must already exist.
-	// Must pass schema evolution compatibility checks.
-	// See RegisterSchemaVersionRequest for JSON format documentation.
-	SchemaJson    string `protobuf:"bytes,1,opt,name=schema_json,json=schemaJson,proto3" json:"schema_json,omitempty"`
+	// The registered schema definition.
+	Schema        *SchemaDefinition `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *UpdateSchemaVersionRequest) Reset() {
-	*x = UpdateSchemaVersionRequest{}
+func (x *RegisterSchemaResponse) Reset() {
+	*x = RegisterSchemaResponse{}
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterSchemaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterSchemaResponse) ProtoMessage() {}
+
+func (x *RegisterSchemaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterSchemaResponse.ProtoReflect.Descriptor instead.
+func (*RegisterSchemaResponse) Descriptor() ([]byte, []int) {
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RegisterSchemaResponse) GetSchema() *SchemaDefinition {
+	if x != nil {
+		return x.Schema
+	}
+	return nil
+}
+
+// AddIndexRequest adds a secondary index to an existing type.
+type AddIndexRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The resource type. Required.
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// The index path to add. Required.
+	// Examples: "spec.nodeName", "metadata.labels.*"
+	// Wildcard ".*" suffix indexes all key-value pairs in a map.
+	IndexPath     string `protobuf:"bytes,2,opt,name=index_path,json=indexPath,proto3" json:"index_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddIndexRequest) Reset() {
+	*x = AddIndexRequest{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateSchemaVersionRequest) String() string {
+func (x *AddIndexRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateSchemaVersionRequest) ProtoMessage() {}
+func (*AddIndexRequest) ProtoMessage() {}
 
-func (x *UpdateSchemaVersionRequest) ProtoReflect() protoreflect.Message {
+func (x *AddIndexRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -306,43 +150,45 @@ func (x *UpdateSchemaVersionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateSchemaVersionRequest.ProtoReflect.Descriptor instead.
-func (*UpdateSchemaVersionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AddIndexRequest.ProtoReflect.Descriptor instead.
+func (*AddIndexRequest) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *UpdateSchemaVersionRequest) GetSchemaJson() string {
+func (x *AddIndexRequest) GetType() string {
 	if x != nil {
-		return x.SchemaJson
+		return x.Type
 	}
 	return ""
 }
 
-type UpdateSchemaVersionResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The updated schema version with server-assigned metadata.
-	SchemaVersion *SchemaVersion `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	// Compatibility check results (informational).
-	// Lists what changed from the previous schema.
-	CompatibilityNotes []string `protobuf:"bytes,2,rep,name=compatibility_notes,json=compatibilityNotes,proto3" json:"compatibility_notes,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+func (x *AddIndexRequest) GetIndexPath() string {
+	if x != nil {
+		return x.IndexPath
+	}
+	return ""
 }
 
-func (x *UpdateSchemaVersionResponse) Reset() {
-	*x = UpdateSchemaVersionResponse{}
+type AddIndexResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddIndexResponse) Reset() {
+	*x = AddIndexResponse{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateSchemaVersionResponse) String() string {
+func (x *AddIndexResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateSchemaVersionResponse) ProtoMessage() {}
+func (*AddIndexResponse) ProtoMessage() {}
 
-func (x *UpdateSchemaVersionResponse) ProtoReflect() protoreflect.Message {
+func (x *AddIndexResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -354,51 +200,36 @@ func (x *UpdateSchemaVersionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateSchemaVersionResponse.ProtoReflect.Descriptor instead.
-func (*UpdateSchemaVersionResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use AddIndexResponse.ProtoReflect.Descriptor instead.
+func (*AddIndexResponse) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *UpdateSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
-	if x != nil {
-		return x.SchemaVersion
-	}
-	return nil
-}
-
-func (x *UpdateSchemaVersionResponse) GetCompatibilityNotes() []string {
-	if x != nil {
-		return x.CompatibilityNotes
-	}
-	return nil
-}
-
-// SetCurrentSchemaVersionRequest sets the active version for a type.
-type SetCurrentSchemaVersionRequest struct {
+// RemoveIndexRequest removes a secondary index from an existing type.
+type RemoveIndexRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema type. Required.
+	// The resource type. Required.
 	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// The version to set as current. Required.
-	// Must be a previously registered version.
-	Version       string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// The index path to remove. Required.
+	IndexPath     string `protobuf:"bytes,2,opt,name=index_path,json=indexPath,proto3" json:"index_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetCurrentSchemaVersionRequest) Reset() {
-	*x = SetCurrentSchemaVersionRequest{}
+func (x *RemoveIndexRequest) Reset() {
+	*x = RemoveIndexRequest{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetCurrentSchemaVersionRequest) String() string {
+func (x *RemoveIndexRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetCurrentSchemaVersionRequest) ProtoMessage() {}
+func (*RemoveIndexRequest) ProtoMessage() {}
 
-func (x *SetCurrentSchemaVersionRequest) ProtoReflect() protoreflect.Message {
+func (x *RemoveIndexRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -410,49 +241,45 @@ func (x *SetCurrentSchemaVersionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetCurrentSchemaVersionRequest.ProtoReflect.Descriptor instead.
-func (*SetCurrentSchemaVersionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RemoveIndexRequest.ProtoReflect.Descriptor instead.
+func (*RemoveIndexRequest) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *SetCurrentSchemaVersionRequest) GetType() string {
+func (x *RemoveIndexRequest) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *SetCurrentSchemaVersionRequest) GetVersion() string {
+func (x *RemoveIndexRequest) GetIndexPath() string {
 	if x != nil {
-		return x.Version
+		return x.IndexPath
 	}
 	return ""
 }
 
-type SetCurrentSchemaVersionResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema version that is now current.
-	SchemaVersion *SchemaVersion `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	// The previous current version (for audit/logging).
-	PreviousVersion string `protobuf:"bytes,2,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+type RemoveIndexResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetCurrentSchemaVersionResponse) Reset() {
-	*x = SetCurrentSchemaVersionResponse{}
+func (x *RemoveIndexResponse) Reset() {
+	*x = RemoveIndexResponse{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetCurrentSchemaVersionResponse) String() string {
+func (x *RemoveIndexResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetCurrentSchemaVersionResponse) ProtoMessage() {}
+func (*RemoveIndexResponse) ProtoMessage() {}
 
-func (x *SetCurrentSchemaVersionResponse) ProtoReflect() protoreflect.Message {
+func (x *RemoveIndexResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -464,53 +291,34 @@ func (x *SetCurrentSchemaVersionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetCurrentSchemaVersionResponse.ProtoReflect.Descriptor instead.
-func (*SetCurrentSchemaVersionResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use RemoveIndexResponse.ProtoReflect.Descriptor instead.
+func (*RemoveIndexResponse) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *SetCurrentSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
-	if x != nil {
-		return x.SchemaVersion
-	}
-	return nil
-}
-
-func (x *SetCurrentSchemaVersionResponse) GetPreviousVersion() string {
-	if x != nil {
-		return x.PreviousVersion
-	}
-	return ""
-}
-
-// GetSchemaVersionRequest retrieves a schema version.
-type GetSchemaVersionRequest struct {
+// GetSchemaRequest retrieves a schema definition.
+type GetSchemaRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema type to retrieve. Required.
-	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// The version to retrieve. If empty, returns the current version.
-	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	// Optional field mask to retrieve only specific fields.
-	// If not set, all fields are returned.
-	FieldMask     *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=field_mask,json=fieldMask,proto3" json:"field_mask,omitempty"`
+	// The resource type to retrieve. Required.
+	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetSchemaVersionRequest) Reset() {
-	*x = GetSchemaVersionRequest{}
+func (x *GetSchemaRequest) Reset() {
+	*x = GetSchemaRequest{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetSchemaVersionRequest) String() string {
+func (x *GetSchemaRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetSchemaVersionRequest) ProtoMessage() {}
+func (*GetSchemaRequest) ProtoMessage() {}
 
-func (x *GetSchemaVersionRequest) ProtoReflect() protoreflect.Message {
+func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -522,53 +330,39 @@ func (x *GetSchemaVersionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSchemaVersionRequest.ProtoReflect.Descriptor instead.
-func (*GetSchemaVersionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetSchemaRequest.ProtoReflect.Descriptor instead.
+func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *GetSchemaVersionRequest) GetType() string {
+func (x *GetSchemaRequest) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *GetSchemaVersionRequest) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
-func (x *GetSchemaVersionRequest) GetFieldMask() *fieldmaskpb.FieldMask {
-	if x != nil {
-		return x.FieldMask
-	}
-	return nil
-}
-
-type GetSchemaVersionResponse struct {
+type GetSchemaResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SchemaVersion *SchemaVersion         `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Schema        *SchemaDefinition      `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetSchemaVersionResponse) Reset() {
-	*x = GetSchemaVersionResponse{}
+func (x *GetSchemaResponse) Reset() {
+	*x = GetSchemaResponse{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetSchemaVersionResponse) String() string {
+func (x *GetSchemaResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetSchemaVersionResponse) ProtoMessage() {}
+func (*GetSchemaResponse) ProtoMessage() {}
 
-func (x *GetSchemaVersionResponse) ProtoReflect() protoreflect.Message {
+func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -580,44 +374,43 @@ func (x *GetSchemaVersionResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetSchemaVersionResponse.ProtoReflect.Descriptor instead.
-func (*GetSchemaVersionResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetSchemaResponse.ProtoReflect.Descriptor instead.
+func (*GetSchemaResponse) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *GetSchemaVersionResponse) GetSchemaVersion() *SchemaVersion {
+func (x *GetSchemaResponse) GetSchema() *SchemaDefinition {
 	if x != nil {
-		return x.SchemaVersion
+		return x.Schema
 	}
 	return nil
 }
 
-// ListSchemaTypesRequest lists all schema types.
-type ListSchemaTypesRequest struct {
+// ListSchemasRequest lists all schema types.
+type ListSchemasRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Maximum number of types to return. Default is 100, max is 1000.
+	// Maximum number of schemas to return. Default is 100, max is 1000.
 	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// Token for pagination. Empty for first page.
-	// Use next_page_token from previous response.
 	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListSchemaTypesRequest) Reset() {
-	*x = ListSchemaTypesRequest{}
+func (x *ListSchemasRequest) Reset() {
+	*x = ListSchemasRequest{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListSchemaTypesRequest) String() string {
+func (x *ListSchemasRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListSchemaTypesRequest) ProtoMessage() {}
+func (*ListSchemasRequest) ProtoMessage() {}
 
-func (x *ListSchemaTypesRequest) ProtoReflect() protoreflect.Message {
+func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -629,29 +422,29 @@ func (x *ListSchemaTypesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListSchemaTypesRequest.ProtoReflect.Descriptor instead.
-func (*ListSchemaTypesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListSchemasRequest.ProtoReflect.Descriptor instead.
+func (*ListSchemasRequest) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *ListSchemaTypesRequest) GetPageSize() int32 {
+func (x *ListSchemasRequest) GetPageSize() int32 {
 	if x != nil {
 		return x.PageSize
 	}
 	return 0
 }
 
-func (x *ListSchemaTypesRequest) GetPageToken() string {
+func (x *ListSchemasRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
 	}
 	return ""
 }
 
-type ListSchemaTypesResponse struct {
+type ListSchemasResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current version of each schema type.
-	SchemaVersions []*SchemaVersion `protobuf:"bytes,1,rep,name=schema_versions,json=schemaVersions,proto3" json:"schema_versions,omitempty"`
+	// All registered schema definitions.
+	Schemas []*SchemaDefinition `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
 	// Token for next page. Empty if no more results.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	// Total count of schema types (across all pages).
@@ -660,20 +453,20 @@ type ListSchemaTypesResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListSchemaTypesResponse) Reset() {
-	*x = ListSchemaTypesResponse{}
+func (x *ListSchemasResponse) Reset() {
+	*x = ListSchemasResponse{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListSchemaTypesResponse) String() string {
+func (x *ListSchemasResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListSchemaTypesResponse) ProtoMessage() {}
+func (*ListSchemasResponse) ProtoMessage() {}
 
-func (x *ListSchemaTypesResponse) ProtoReflect() protoreflect.Message {
+func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -685,59 +478,66 @@ func (x *ListSchemaTypesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListSchemaTypesResponse.ProtoReflect.Descriptor instead.
-func (*ListSchemaTypesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListSchemasResponse.ProtoReflect.Descriptor instead.
+func (*ListSchemasResponse) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *ListSchemaTypesResponse) GetSchemaVersions() []*SchemaVersion {
+func (x *ListSchemasResponse) GetSchemas() []*SchemaDefinition {
 	if x != nil {
-		return x.SchemaVersions
+		return x.Schemas
 	}
 	return nil
 }
 
-func (x *ListSchemaTypesResponse) GetNextPageToken() string {
+func (x *ListSchemasResponse) GetNextPageToken() string {
 	if x != nil {
 		return x.NextPageToken
 	}
 	return ""
 }
 
-func (x *ListSchemaTypesResponse) GetTotalCount() int32 {
+func (x *ListSchemasResponse) GetTotalCount() int32 {
 	if x != nil {
 		return x.TotalCount
 	}
 	return 0
 }
 
-// ListSchemaVersionsRequest lists all versions of a schema type.
-type ListSchemaVersionsRequest struct {
+// SchemaDefinition defines the indexing configuration for a resource type.
+// This is a mutable document — secondary indexes can be added or removed.
+// The primary key is immutable after registration.
+type SchemaDefinition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema type. Required.
+	// Unique identifier for this resource type. Immutable after creation.
+	// Examples: "pods", "events", "users"
 	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// Maximum number of versions to return. Default is 100, max is 1000.
-	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	// Token for pagination. Empty for first page.
-	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The JSON path that serves as the primary key. Required. Immutable.
+	// Examples: "metadata.name", "id"
+	PrimaryKey string `protobuf:"bytes,2,opt,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
+	// JSON paths to create secondary indexes on.
+	// Supports dot notation for nested fields (e.g., "spec.nodeName").
+	// Supports wildcard map indexes (e.g., "metadata.labels.*") to index
+	// all key-value pairs in a JSON map.
+	SecondaryIndexes []string `protobuf:"bytes,3,rep,name=secondary_indexes,json=secondaryIndexes,proto3" json:"secondary_indexes,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
-func (x *ListSchemaVersionsRequest) Reset() {
-	*x = ListSchemaVersionsRequest{}
+func (x *SchemaDefinition) Reset() {
+	*x = SchemaDefinition{}
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListSchemaVersionsRequest) String() string {
+func (x *SchemaDefinition) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListSchemaVersionsRequest) ProtoMessage() {}
+func (*SchemaDefinition) ProtoMessage() {}
 
-func (x *ListSchemaVersionsRequest) ProtoReflect() protoreflect.Message {
+func (x *SchemaDefinition) ProtoReflect() protoreflect.Message {
 	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -749,507 +549,75 @@ func (x *ListSchemaVersionsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListSchemaVersionsRequest.ProtoReflect.Descriptor instead.
-func (*ListSchemaVersionsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SchemaDefinition.ProtoReflect.Descriptor instead.
+func (*SchemaDefinition) Descriptor() ([]byte, []int) {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *ListSchemaVersionsRequest) GetType() string {
+func (x *SchemaDefinition) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *ListSchemaVersionsRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ListSchemaVersionsRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-type ListSchemaVersionsResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// All versions of the schema, ordered by registration time.
-	SchemaVersions []*SchemaVersion `protobuf:"bytes,1,rep,name=schema_versions,json=schemaVersions,proto3" json:"schema_versions,omitempty"`
-	// The current (active) version.
-	CurrentVersion string `protobuf:"bytes,2,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
-	// Token for next page. Empty if no more results.
-	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// Total count of versions (across all pages).
-	TotalCount    int32 `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListSchemaVersionsResponse) Reset() {
-	*x = ListSchemaVersionsResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListSchemaVersionsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListSchemaVersionsResponse) ProtoMessage() {}
-
-func (x *ListSchemaVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListSchemaVersionsResponse.ProtoReflect.Descriptor instead.
-func (*ListSchemaVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *ListSchemaVersionsResponse) GetSchemaVersions() []*SchemaVersion {
-	if x != nil {
-		return x.SchemaVersions
-	}
-	return nil
-}
-
-func (x *ListSchemaVersionsResponse) GetCurrentVersion() string {
-	if x != nil {
-		return x.CurrentVersion
-	}
-	return ""
-}
-
-func (x *ListSchemaVersionsResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *ListSchemaVersionsResponse) GetTotalCount() int32 {
-	if x != nil {
-		return x.TotalCount
-	}
-	return 0
-}
-
-// SchemaVersion defines a specific version of a schema type.
-// This message is returned by the server; clients submit schema_json.
-type SchemaVersion struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique identifier for this resource type. Immutable after creation.
-	// Examples: "events", "users", "orders"
-	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// Version identifier. Must be unique within a type.
-	// Convention: "v1", "v2", etc.
-	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	// The field that serves as the primary key. Required.
-	// Must reference a field defined in `fields`.
-	// Cannot be changed after initial schema registration.
-	PrimaryKey string `protobuf:"bytes,3,opt,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
-	// Fields to create secondary indexes on.
-	// Supports dot notation for nested fields (e.g., "metadata.region", "address.city").
-	// Each must reference a field or nested path within `fields`.
-	// Can be added in schema updates (new records only indexed).
-	SecondaryIndexes []string `protobuf:"bytes,4,rep,name=secondary_indexes,json=secondaryIndexes,proto3" json:"secondary_indexes,omitempty"`
-	// Field definitions for this schema.
-	Fields map[string]*FieldDefinition `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Server-assigned metadata (read-only).
-	Metadata      *SchemaVersionMetadata `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SchemaVersion) Reset() {
-	*x = SchemaVersion{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SchemaVersion) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SchemaVersion) ProtoMessage() {}
-
-func (x *SchemaVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SchemaVersion.ProtoReflect.Descriptor instead.
-func (*SchemaVersion) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *SchemaVersion) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *SchemaVersion) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
-func (x *SchemaVersion) GetPrimaryKey() string {
+func (x *SchemaDefinition) GetPrimaryKey() string {
 	if x != nil {
 		return x.PrimaryKey
 	}
 	return ""
 }
 
-func (x *SchemaVersion) GetSecondaryIndexes() []string {
+func (x *SchemaDefinition) GetSecondaryIndexes() []string {
 	if x != nil {
 		return x.SecondaryIndexes
 	}
 	return nil
 }
 
-func (x *SchemaVersion) GetFields() map[string]*FieldDefinition {
-	if x != nil {
-		return x.Fields
-	}
-	return nil
-}
-
-func (x *SchemaVersion) GetMetadata() *SchemaVersionMetadata {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-// FieldDefinition describes a single field in the schema.
-type FieldDefinition struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The data type of this field.
-	Type FieldType `protobuf:"varint,1,opt,name=type,proto3,enum=indexedwatch.schema.v1.FieldType" json:"type,omitempty"`
-	// Whether this field is required on create.
-	// If true and missing, write is rejected.
-	Required bool `protobuf:"varint,2,opt,name=required,proto3" json:"required,omitempty"`
-	// Default value for this field (JSON-encoded).
-	// Used when field is missing on read (for backwards compatibility).
-	// Only applicable if required=false.
-	DefaultValue string `protobuf:"bytes,3,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
-	// Human-readable description of this field.
-	Description   string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FieldDefinition) Reset() {
-	*x = FieldDefinition{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FieldDefinition) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FieldDefinition) ProtoMessage() {}
-
-func (x *FieldDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FieldDefinition.ProtoReflect.Descriptor instead.
-func (*FieldDefinition) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *FieldDefinition) GetType() FieldType {
-	if x != nil {
-		return x.Type
-	}
-	return FieldType_FIELD_TYPE_UNSPECIFIED
-}
-
-func (x *FieldDefinition) GetRequired() bool {
-	if x != nil {
-		return x.Required
-	}
-	return false
-}
-
-func (x *FieldDefinition) GetDefaultValue() string {
-	if x != nil {
-		return x.DefaultValue
-	}
-	return ""
-}
-
-func (x *FieldDefinition) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-// SchemaVersionMetadata contains server-assigned metadata.
-type SchemaVersionMetadata struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// When this schema version was registered.
-	// RFC 3339 format.
-	CreatedAt string `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	// Whether this is the current (active) version for its type.
-	IsCurrent bool `protobuf:"varint,2,opt,name=is_current,json=isCurrent,proto3" json:"is_current,omitempty"`
-	// Sequence number in the schema WAL.
-	// Used internally for ordering.
-	WalSeqNum     uint64 `protobuf:"varint,3,opt,name=wal_seq_num,json=walSeqNum,proto3" json:"wal_seq_num,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SchemaVersionMetadata) Reset() {
-	*x = SchemaVersionMetadata{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SchemaVersionMetadata) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SchemaVersionMetadata) ProtoMessage() {}
-
-func (x *SchemaVersionMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SchemaVersionMetadata.ProtoReflect.Descriptor instead.
-func (*SchemaVersionMetadata) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *SchemaVersionMetadata) GetCreatedAt() string {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return ""
-}
-
-func (x *SchemaVersionMetadata) GetIsCurrent() bool {
-	if x != nil {
-		return x.IsCurrent
-	}
-	return false
-}
-
-func (x *SchemaVersionMetadata) GetWalSeqNum() uint64 {
-	if x != nil {
-		return x.WalSeqNum
-	}
-	return 0
-}
-
-// SchemaEvolutionError describes why a schema update was rejected.
-type SchemaEvolutionError struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The type of evolution rule that was violated.
-	Violation EvolutionViolation `protobuf:"varint,1,opt,name=violation,proto3,enum=indexedwatch.schema.v1.EvolutionViolation" json:"violation,omitempty"`
-	// Human-readable description of the error.
-	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	// The field that caused the violation, if applicable.
-	Field         string `protobuf:"bytes,3,opt,name=field,proto3" json:"field,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SchemaEvolutionError) Reset() {
-	*x = SchemaEvolutionError{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SchemaEvolutionError) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SchemaEvolutionError) ProtoMessage() {}
-
-func (x *SchemaEvolutionError) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SchemaEvolutionError.ProtoReflect.Descriptor instead.
-func (*SchemaEvolutionError) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *SchemaEvolutionError) GetViolation() EvolutionViolation {
-	if x != nil {
-		return x.Violation
-	}
-	return EvolutionViolation_EVOLUTION_VIOLATION_UNSPECIFIED
-}
-
-func (x *SchemaEvolutionError) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *SchemaEvolutionError) GetField() string {
-	if x != nil {
-		return x.Field
-	}
-	return ""
-}
-
 var File_indexedwatch_schema_v1_schema_proto protoreflect.FileDescriptor
 
 const file_indexedwatch_schema_v1_schema_proto_rawDesc = "" +
 	"\n" +
-	"#indexedwatch/schema/v1/schema.proto\x12\x16indexedwatch.schema.v1\x1a google/protobuf/field_mask.proto\"?\n" +
-	"\x1cRegisterSchemaVersionRequest\x12\x1f\n" +
-	"\vschema_json\x18\x01 \x01(\tR\n" +
-	"schemaJson\"m\n" +
-	"\x1dRegisterSchemaVersionResponse\x12L\n" +
-	"\x0eschema_version\x18\x01 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\"=\n" +
-	"\x1aUpdateSchemaVersionRequest\x12\x1f\n" +
-	"\vschema_json\x18\x01 \x01(\tR\n" +
-	"schemaJson\"\x9c\x01\n" +
-	"\x1bUpdateSchemaVersionResponse\x12L\n" +
-	"\x0eschema_version\x18\x01 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\x12/\n" +
-	"\x13compatibility_notes\x18\x02 \x03(\tR\x12compatibilityNotes\"N\n" +
-	"\x1eSetCurrentSchemaVersionRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"\x9a\x01\n" +
-	"\x1fSetCurrentSchemaVersionResponse\x12L\n" +
-	"\x0eschema_version\x18\x01 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\x12)\n" +
-	"\x10previous_version\x18\x02 \x01(\tR\x0fpreviousVersion\"\x82\x01\n" +
-	"\x17GetSchemaVersionRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\x129\n" +
+	"#indexedwatch/schema/v1/schema.proto\x12\x16indexedwatch.schema.v1\"Y\n" +
+	"\x15RegisterSchemaRequest\x12@\n" +
+	"\x06schema\x18\x01 \x01(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\x06schema\"Z\n" +
+	"\x16RegisterSchemaResponse\x12@\n" +
+	"\x06schema\x18\x01 \x01(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\x06schema\"D\n" +
+	"\x0fAddIndexRequest\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1d\n" +
 	"\n" +
-	"field_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskR\tfieldMask\"h\n" +
-	"\x18GetSchemaVersionResponse\x12L\n" +
-	"\x0eschema_version\x18\x01 \x01(\v2%.indexedwatch.schema.v1.SchemaVersionR\rschemaVersion\"T\n" +
-	"\x16ListSchemaTypesRequest\x12\x1b\n" +
+	"index_path\x18\x02 \x01(\tR\tindexPath\"\x12\n" +
+	"\x10AddIndexResponse\"G\n" +
+	"\x12RemoveIndexRequest\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1d\n" +
+	"\n" +
+	"index_path\x18\x02 \x01(\tR\tindexPath\"\x15\n" +
+	"\x13RemoveIndexResponse\"&\n" +
+	"\x10GetSchemaRequest\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\"U\n" +
+	"\x11GetSchemaResponse\x12@\n" +
+	"\x06schema\x18\x01 \x01(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\x06schema\"P\n" +
+	"\x12ListSchemasRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"\xb2\x01\n" +
-	"\x17ListSchemaTypesResponse\x12N\n" +
-	"\x0fschema_versions\x18\x01 \x03(\v2%.indexedwatch.schema.v1.SchemaVersionR\x0eschemaVersions\x12&\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\"\xa2\x01\n" +
+	"\x13ListSchemasResponse\x12B\n" +
+	"\aschemas\x18\x01 \x03(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\aschemas\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x05R\n" +
-	"totalCount\"k\n" +
-	"\x19ListSchemaVersionsRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1b\n" +
-	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"\xde\x01\n" +
-	"\x1aListSchemaVersionsResponse\x12N\n" +
-	"\x0fschema_versions\x18\x01 \x03(\v2%.indexedwatch.schema.v1.SchemaVersionR\x0eschemaVersions\x12'\n" +
-	"\x0fcurrent_version\x18\x02 \x01(\tR\x0ecurrentVersion\x12&\n" +
-	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\x12\x1f\n" +
-	"\vtotal_count\x18\x04 \x01(\x05R\n" +
-	"totalCount\"\x85\x03\n" +
-	"\rSchemaVersion\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1f\n" +
-	"\vprimary_key\x18\x03 \x01(\tR\n" +
+	"totalCount\"t\n" +
+	"\x10SchemaDefinition\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1f\n" +
+	"\vprimary_key\x18\x02 \x01(\tR\n" +
 	"primaryKey\x12+\n" +
-	"\x11secondary_indexes\x18\x04 \x03(\tR\x10secondaryIndexes\x12I\n" +
-	"\x06fields\x18\x05 \x03(\v21.indexedwatch.schema.v1.SchemaVersion.FieldsEntryR\x06fields\x12I\n" +
-	"\bmetadata\x18\x06 \x01(\v2-.indexedwatch.schema.v1.SchemaVersionMetadataR\bmetadata\x1ab\n" +
-	"\vFieldsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
-	"\x05value\x18\x02 \x01(\v2'.indexedwatch.schema.v1.FieldDefinitionR\x05value:\x028\x01\"\xab\x01\n" +
-	"\x0fFieldDefinition\x125\n" +
-	"\x04type\x18\x01 \x01(\x0e2!.indexedwatch.schema.v1.FieldTypeR\x04type\x12\x1a\n" +
-	"\brequired\x18\x02 \x01(\bR\brequired\x12#\n" +
-	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\"u\n" +
-	"\x15SchemaVersionMetadata\x12\x1d\n" +
-	"\n" +
-	"created_at\x18\x01 \x01(\tR\tcreatedAt\x12\x1d\n" +
-	"\n" +
-	"is_current\x18\x02 \x01(\bR\tisCurrent\x12\x1e\n" +
-	"\vwal_seq_num\x18\x03 \x01(\x04R\twalSeqNum\"\x90\x01\n" +
-	"\x14SchemaEvolutionError\x12H\n" +
-	"\tviolation\x18\x01 \x01(\x0e2*.indexedwatch.schema.v1.EvolutionViolationR\tviolation\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
-	"\x05field\x18\x03 \x01(\tR\x05field*\xdd\x01\n" +
-	"\tFieldType\x12\x1a\n" +
-	"\x16FIELD_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11FIELD_TYPE_STRING\x10\x01\x12\x14\n" +
-	"\x10FIELD_TYPE_INT64\x10\x02\x12\x15\n" +
-	"\x11FIELD_TYPE_DOUBLE\x10\x03\x12\x13\n" +
-	"\x0fFIELD_TYPE_BOOL\x10\x04\x12\x14\n" +
-	"\x10FIELD_TYPE_BYTES\x10\x05\x12\x18\n" +
-	"\x14FIELD_TYPE_TIMESTAMP\x10\x06\x12\x15\n" +
-	"\x11FIELD_TYPE_OBJECT\x10\a\x12\x14\n" +
-	"\x10FIELD_TYPE_ARRAY\x10\b*\xec\x01\n" +
-	"\x12EvolutionViolation\x12#\n" +
-	"\x1fEVOLUTION_VIOLATION_UNSPECIFIED\x10\x00\x12+\n" +
-	"'EVOLUTION_VIOLATION_PRIMARY_KEY_CHANGED\x10\x01\x12*\n" +
-	"&EVOLUTION_VIOLATION_FIELD_TYPE_CHANGED\x10\x02\x121\n" +
-	"-EVOLUTION_VIOLATION_REQUIRED_FIELD_NO_DEFAULT\x10\x03\x12%\n" +
-	"!EVOLUTION_VIOLATION_FIELD_RENAMED\x10\x042\x8b\x06\n" +
-	"\rSchemaService\x12\x84\x01\n" +
-	"\x15RegisterSchemaVersion\x124.indexedwatch.schema.v1.RegisterSchemaVersionRequest\x1a5.indexedwatch.schema.v1.RegisterSchemaVersionResponse\x12~\n" +
-	"\x13UpdateSchemaVersion\x122.indexedwatch.schema.v1.UpdateSchemaVersionRequest\x1a3.indexedwatch.schema.v1.UpdateSchemaVersionResponse\x12\x8a\x01\n" +
-	"\x17SetCurrentSchemaVersion\x126.indexedwatch.schema.v1.SetCurrentSchemaVersionRequest\x1a7.indexedwatch.schema.v1.SetCurrentSchemaVersionResponse\x12u\n" +
-	"\x10GetSchemaVersion\x12/.indexedwatch.schema.v1.GetSchemaVersionRequest\x1a0.indexedwatch.schema.v1.GetSchemaVersionResponse\x12r\n" +
-	"\x0fListSchemaTypes\x12..indexedwatch.schema.v1.ListSchemaTypesRequest\x1a/.indexedwatch.schema.v1.ListSchemaTypesResponse\x12{\n" +
-	"\x12ListSchemaVersions\x121.indexedwatch.schema.v1.ListSchemaVersionsRequest\x1a2.indexedwatch.schema.v1.ListSchemaVersionsResponseB\xf0\x01\n" +
+	"\x11secondary_indexes\x18\x03 \x03(\tR\x10secondaryIndexes2\x91\x04\n" +
+	"\rSchemaService\x12o\n" +
+	"\x0eRegisterSchema\x12-.indexedwatch.schema.v1.RegisterSchemaRequest\x1a..indexedwatch.schema.v1.RegisterSchemaResponse\x12]\n" +
+	"\bAddIndex\x12'.indexedwatch.schema.v1.AddIndexRequest\x1a(.indexedwatch.schema.v1.AddIndexResponse\x12f\n" +
+	"\vRemoveIndex\x12*.indexedwatch.schema.v1.RemoveIndexRequest\x1a+.indexedwatch.schema.v1.RemoveIndexResponse\x12`\n" +
+	"\tGetSchema\x12(.indexedwatch.schema.v1.GetSchemaRequest\x1a).indexedwatch.schema.v1.GetSchemaResponse\x12f\n" +
+	"\vListSchemas\x12*.indexedwatch.schema.v1.ListSchemasRequest\x1a+.indexedwatch.schema.v1.ListSchemasResponseB\xf0\x01\n" +
 	"\x1acom.indexedwatch.schema.v1B\vSchemaProtoP\x01ZKgithub.com/subganapathy/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1\xa2\x02\x03ISX\xaa\x02\x16Indexedwatch.Schema.V1\xca\x02\x16Indexedwatch\\Schema\\V1\xe2\x02\"Indexedwatch\\Schema\\V1\\GPBMetadata\xea\x02\x18Indexedwatch::Schema::V1b\x06proto3"
 
 var (
@@ -1264,60 +632,40 @@ func file_indexedwatch_schema_v1_schema_proto_rawDescGZIP() []byte {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescData
 }
 
-var file_indexedwatch_schema_v1_schema_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_indexedwatch_schema_v1_schema_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_indexedwatch_schema_v1_schema_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_indexedwatch_schema_v1_schema_proto_goTypes = []any{
-	(FieldType)(0),                          // 0: indexedwatch.schema.v1.FieldType
-	(EvolutionViolation)(0),                 // 1: indexedwatch.schema.v1.EvolutionViolation
-	(*RegisterSchemaVersionRequest)(nil),    // 2: indexedwatch.schema.v1.RegisterSchemaVersionRequest
-	(*RegisterSchemaVersionResponse)(nil),   // 3: indexedwatch.schema.v1.RegisterSchemaVersionResponse
-	(*UpdateSchemaVersionRequest)(nil),      // 4: indexedwatch.schema.v1.UpdateSchemaVersionRequest
-	(*UpdateSchemaVersionResponse)(nil),     // 5: indexedwatch.schema.v1.UpdateSchemaVersionResponse
-	(*SetCurrentSchemaVersionRequest)(nil),  // 6: indexedwatch.schema.v1.SetCurrentSchemaVersionRequest
-	(*SetCurrentSchemaVersionResponse)(nil), // 7: indexedwatch.schema.v1.SetCurrentSchemaVersionResponse
-	(*GetSchemaVersionRequest)(nil),         // 8: indexedwatch.schema.v1.GetSchemaVersionRequest
-	(*GetSchemaVersionResponse)(nil),        // 9: indexedwatch.schema.v1.GetSchemaVersionResponse
-	(*ListSchemaTypesRequest)(nil),          // 10: indexedwatch.schema.v1.ListSchemaTypesRequest
-	(*ListSchemaTypesResponse)(nil),         // 11: indexedwatch.schema.v1.ListSchemaTypesResponse
-	(*ListSchemaVersionsRequest)(nil),       // 12: indexedwatch.schema.v1.ListSchemaVersionsRequest
-	(*ListSchemaVersionsResponse)(nil),      // 13: indexedwatch.schema.v1.ListSchemaVersionsResponse
-	(*SchemaVersion)(nil),                   // 14: indexedwatch.schema.v1.SchemaVersion
-	(*FieldDefinition)(nil),                 // 15: indexedwatch.schema.v1.FieldDefinition
-	(*SchemaVersionMetadata)(nil),           // 16: indexedwatch.schema.v1.SchemaVersionMetadata
-	(*SchemaEvolutionError)(nil),            // 17: indexedwatch.schema.v1.SchemaEvolutionError
-	nil,                                     // 18: indexedwatch.schema.v1.SchemaVersion.FieldsEntry
-	(*fieldmaskpb.FieldMask)(nil),           // 19: google.protobuf.FieldMask
+	(*RegisterSchemaRequest)(nil),  // 0: indexedwatch.schema.v1.RegisterSchemaRequest
+	(*RegisterSchemaResponse)(nil), // 1: indexedwatch.schema.v1.RegisterSchemaResponse
+	(*AddIndexRequest)(nil),        // 2: indexedwatch.schema.v1.AddIndexRequest
+	(*AddIndexResponse)(nil),       // 3: indexedwatch.schema.v1.AddIndexResponse
+	(*RemoveIndexRequest)(nil),     // 4: indexedwatch.schema.v1.RemoveIndexRequest
+	(*RemoveIndexResponse)(nil),    // 5: indexedwatch.schema.v1.RemoveIndexResponse
+	(*GetSchemaRequest)(nil),       // 6: indexedwatch.schema.v1.GetSchemaRequest
+	(*GetSchemaResponse)(nil),      // 7: indexedwatch.schema.v1.GetSchemaResponse
+	(*ListSchemasRequest)(nil),     // 8: indexedwatch.schema.v1.ListSchemasRequest
+	(*ListSchemasResponse)(nil),    // 9: indexedwatch.schema.v1.ListSchemasResponse
+	(*SchemaDefinition)(nil),       // 10: indexedwatch.schema.v1.SchemaDefinition
 }
 var file_indexedwatch_schema_v1_schema_proto_depIdxs = []int32{
-	14, // 0: indexedwatch.schema.v1.RegisterSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
-	14, // 1: indexedwatch.schema.v1.UpdateSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
-	14, // 2: indexedwatch.schema.v1.SetCurrentSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
-	19, // 3: indexedwatch.schema.v1.GetSchemaVersionRequest.field_mask:type_name -> google.protobuf.FieldMask
-	14, // 4: indexedwatch.schema.v1.GetSchemaVersionResponse.schema_version:type_name -> indexedwatch.schema.v1.SchemaVersion
-	14, // 5: indexedwatch.schema.v1.ListSchemaTypesResponse.schema_versions:type_name -> indexedwatch.schema.v1.SchemaVersion
-	14, // 6: indexedwatch.schema.v1.ListSchemaVersionsResponse.schema_versions:type_name -> indexedwatch.schema.v1.SchemaVersion
-	18, // 7: indexedwatch.schema.v1.SchemaVersion.fields:type_name -> indexedwatch.schema.v1.SchemaVersion.FieldsEntry
-	16, // 8: indexedwatch.schema.v1.SchemaVersion.metadata:type_name -> indexedwatch.schema.v1.SchemaVersionMetadata
-	0,  // 9: indexedwatch.schema.v1.FieldDefinition.type:type_name -> indexedwatch.schema.v1.FieldType
-	1,  // 10: indexedwatch.schema.v1.SchemaEvolutionError.violation:type_name -> indexedwatch.schema.v1.EvolutionViolation
-	15, // 11: indexedwatch.schema.v1.SchemaVersion.FieldsEntry.value:type_name -> indexedwatch.schema.v1.FieldDefinition
-	2,  // 12: indexedwatch.schema.v1.SchemaService.RegisterSchemaVersion:input_type -> indexedwatch.schema.v1.RegisterSchemaVersionRequest
-	4,  // 13: indexedwatch.schema.v1.SchemaService.UpdateSchemaVersion:input_type -> indexedwatch.schema.v1.UpdateSchemaVersionRequest
-	6,  // 14: indexedwatch.schema.v1.SchemaService.SetCurrentSchemaVersion:input_type -> indexedwatch.schema.v1.SetCurrentSchemaVersionRequest
-	8,  // 15: indexedwatch.schema.v1.SchemaService.GetSchemaVersion:input_type -> indexedwatch.schema.v1.GetSchemaVersionRequest
-	10, // 16: indexedwatch.schema.v1.SchemaService.ListSchemaTypes:input_type -> indexedwatch.schema.v1.ListSchemaTypesRequest
-	12, // 17: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:input_type -> indexedwatch.schema.v1.ListSchemaVersionsRequest
-	3,  // 18: indexedwatch.schema.v1.SchemaService.RegisterSchemaVersion:output_type -> indexedwatch.schema.v1.RegisterSchemaVersionResponse
-	5,  // 19: indexedwatch.schema.v1.SchemaService.UpdateSchemaVersion:output_type -> indexedwatch.schema.v1.UpdateSchemaVersionResponse
-	7,  // 20: indexedwatch.schema.v1.SchemaService.SetCurrentSchemaVersion:output_type -> indexedwatch.schema.v1.SetCurrentSchemaVersionResponse
-	9,  // 21: indexedwatch.schema.v1.SchemaService.GetSchemaVersion:output_type -> indexedwatch.schema.v1.GetSchemaVersionResponse
-	11, // 22: indexedwatch.schema.v1.SchemaService.ListSchemaTypes:output_type -> indexedwatch.schema.v1.ListSchemaTypesResponse
-	13, // 23: indexedwatch.schema.v1.SchemaService.ListSchemaVersions:output_type -> indexedwatch.schema.v1.ListSchemaVersionsResponse
-	18, // [18:24] is the sub-list for method output_type
-	12, // [12:18] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	10, // 0: indexedwatch.schema.v1.RegisterSchemaRequest.schema:type_name -> indexedwatch.schema.v1.SchemaDefinition
+	10, // 1: indexedwatch.schema.v1.RegisterSchemaResponse.schema:type_name -> indexedwatch.schema.v1.SchemaDefinition
+	10, // 2: indexedwatch.schema.v1.GetSchemaResponse.schema:type_name -> indexedwatch.schema.v1.SchemaDefinition
+	10, // 3: indexedwatch.schema.v1.ListSchemasResponse.schemas:type_name -> indexedwatch.schema.v1.SchemaDefinition
+	0,  // 4: indexedwatch.schema.v1.SchemaService.RegisterSchema:input_type -> indexedwatch.schema.v1.RegisterSchemaRequest
+	2,  // 5: indexedwatch.schema.v1.SchemaService.AddIndex:input_type -> indexedwatch.schema.v1.AddIndexRequest
+	4,  // 6: indexedwatch.schema.v1.SchemaService.RemoveIndex:input_type -> indexedwatch.schema.v1.RemoveIndexRequest
+	6,  // 7: indexedwatch.schema.v1.SchemaService.GetSchema:input_type -> indexedwatch.schema.v1.GetSchemaRequest
+	8,  // 8: indexedwatch.schema.v1.SchemaService.ListSchemas:input_type -> indexedwatch.schema.v1.ListSchemasRequest
+	1,  // 9: indexedwatch.schema.v1.SchemaService.RegisterSchema:output_type -> indexedwatch.schema.v1.RegisterSchemaResponse
+	3,  // 10: indexedwatch.schema.v1.SchemaService.AddIndex:output_type -> indexedwatch.schema.v1.AddIndexResponse
+	5,  // 11: indexedwatch.schema.v1.SchemaService.RemoveIndex:output_type -> indexedwatch.schema.v1.RemoveIndexResponse
+	7,  // 12: indexedwatch.schema.v1.SchemaService.GetSchema:output_type -> indexedwatch.schema.v1.GetSchemaResponse
+	9,  // 13: indexedwatch.schema.v1.SchemaService.ListSchemas:output_type -> indexedwatch.schema.v1.ListSchemasResponse
+	9,  // [9:14] is the sub-list for method output_type
+	4,  // [4:9] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_indexedwatch_schema_v1_schema_proto_init() }
@@ -1330,14 +678,13 @@ func file_indexedwatch_schema_v1_schema_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_indexedwatch_schema_v1_schema_proto_rawDesc), len(file_indexedwatch_schema_v1_schema_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   17,
+			NumEnums:      0,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_indexedwatch_schema_v1_schema_proto_goTypes,
 		DependencyIndexes: file_indexedwatch_schema_v1_schema_proto_depIdxs,
-		EnumInfos:         file_indexedwatch_schema_v1_schema_proto_enumTypes,
 		MessageInfos:      file_indexedwatch_schema_v1_schema_proto_msgTypes,
 	}.Build()
 	File_indexedwatch_schema_v1_schema_proto = out.File

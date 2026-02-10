@@ -12,24 +12,24 @@ import "indexedwatch/schema/v1/schema.proto";
 message SchemaWALEntry {
   SchemaOperation operation = 1;
 
-  // For REGISTER and UPDATE: the full schema definition.
-  SchemaVersion schema = 2;
+  // For REGISTER: the full schema definition (type + PK + initial SKs).
+  SchemaDefinition schema = 2;
 
-  // For SET_CURRENT: just the type and target version.
+  // For ADD_INDEX / REMOVE_INDEX: the target type and index path.
   string type = 3;
-  string version = 4;
+  string index_path = 4;
 }
 
 // SchemaOperation enumerates the operations that can be recorded in the schema WAL.
 enum SchemaOperation {
   SCHEMA_OPERATION_UNSPECIFIED = 0;
 
-  // Register a new schema version for a type.
+  // Register a new resource type with its primary key and initial secondary indexes.
   SCHEMA_OPERATION_REGISTER = 1;
 
-  // Update an existing schema version in place (backwards-compatible changes).
-  SCHEMA_OPERATION_UPDATE = 2;
+  // Add a secondary index to an existing type.
+  SCHEMA_OPERATION_ADD_INDEX = 2;
 
-  // Set the current (active) version for a type.
-  SCHEMA_OPERATION_SET_CURRENT = 3;
+  // Remove a secondary index from an existing type.
+  SCHEMA_OPERATION_REMOVE_INDEX = 3;
 }

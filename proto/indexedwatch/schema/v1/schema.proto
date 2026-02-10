@@ -2,153 +2,100 @@ syntax = "proto3";
 
 package indexedwatch.schema.v1;
 
-import "google/protobuf/field_mask.proto";
+option go_package = "github.com/subganapathy/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1";
 
-// SchemaService manages schema versions for resource types.
-// Schemas define the structure of resources including primary key,
-// secondary indexes, and field definitions.
+// SchemaService manages schema definitions for resource types.
+// Schemas define what to index: a primary key and secondary indexes.
+// The storage engine treats resource data as opaque JSON — schema only
+// controls indexing, not field structure (that's the API layer's job).
 //
 // Workflow:
-// 1. RegisterSchemaVersion to register a new version (v1, v2, etc.)
-// 2. UpdateSchemaVersion to modify an existing version (add optional fields, etc.)
-// 3. SetCurrentSchemaVersion to activate a version for writes
-// 4. Rollback by SetCurrentSchemaVersion to a previous version
+// 1. RegisterSchema to create a new type with PK + initial secondary indexes
+// 2. AddIndex / RemoveIndex to evolve the index set
+// 3. GetSchema / ListSchemas for discovery
 //
-// Validation: Use client-side linting for schema validation. Fetch existing
-// schemas via ListSchemaVersions to check evolution compatibility locally.
+// The primary key is immutable after registration. Secondary indexes
+// can be added or removed at any time — adding triggers re-indexing.
 service SchemaService {
-  // RegisterSchemaVersion registers a new version of a schema type.
-  // If the type doesn't exist, it is created along with backend resources
-  // (WAL, State Machine, and LSMs for each secondary index).
-  // If the type exists, adds the new version to the type's version list.
-  // Fails if the version already exists for this type.
-  // Does NOT automatically set as current - use SetCurrentSchemaVersion.
-  rpc RegisterSchemaVersion(RegisterSchemaVersionRequest) returns (RegisterSchemaVersionResponse);
+  // RegisterSchema registers a new resource type with its primary key
+  // and initial set of secondary indexes.
+  // Fails if the type already exists.
+  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
 
-  // UpdateSchemaVersion updates an existing schema version in place.
-  // Use for backwards-compatible changes to an existing version:
-  // - Adding optional fields
-  // - Adding new secondary indexes
-  // - Updating field descriptions
-  // Enforces schema evolution rules:
-  // - Primary key cannot change
-  // - Field types cannot change
-  // - New required fields must have defaults
-  // Fails if the type or version doesn't exist.
-  rpc UpdateSchemaVersion(UpdateSchemaVersionRequest) returns (UpdateSchemaVersionResponse);
+  // AddIndex adds a secondary index to an existing type.
+  // Triggers re-indexing of all existing records for this field.
+  // No-op if the index already exists.
+  rpc AddIndex(AddIndexRequest) returns (AddIndexResponse);
 
-  // SetCurrentSchemaVersion sets which version is the current (active) version.
-  // All new writes are validated against the current version.
-  // Use this to activate a new version or rollback to a previous one.
-  rpc SetCurrentSchemaVersion(SetCurrentSchemaVersionRequest) returns (SetCurrentSchemaVersionResponse);
+  // RemoveIndex removes a secondary index from an existing type.
+  // The index LSM is not deleted immediately (lazy cleanup).
+  // Fails if the index doesn't exist.
+  rpc RemoveIndex(RemoveIndexRequest) returns (RemoveIndexResponse);
 
-  // GetSchemaVersion retrieves a specific schema version.
-  // If version is empty, returns the current version.
-  rpc GetSchemaVersion(GetSchemaVersionRequest) returns (GetSchemaVersionResponse);
+  // GetSchema retrieves the current schema definition for a type.
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
 
-  // ListSchemaTypes returns all schema types.
-  // Returns the current version of each type by default.
-  rpc ListSchemaTypes(ListSchemaTypesRequest) returns (ListSchemaTypesResponse);
-
-  // ListSchemaVersions returns all versions of a schema type.
-  rpc ListSchemaVersions(ListSchemaVersionsRequest) returns (ListSchemaVersionsResponse);
+  // ListSchemas lists all registered schema types.
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
 }
 
-// RegisterSchemaVersionRequest registers a new version of a schema type.
-message RegisterSchemaVersionRequest {
-  // The schema definition as a JSON string.
-  // Using JSON allows schemas to be version-controlled and deployed via CI/CD.
-  //
-  // Example:
-  // {
-  //   "type": "events",
-  //   "version": "v1",
-  //   "primaryKey": "id",
-  //   "secondaryIndexes": ["user_id", "metadata.region"],
-  //   "fields": {
-  //     "id": {"type": "string", "required": true},
-  //     "user_id": {"type": "string", "required": true},
-  //     "metadata": {"type": "object"}
-  //   }
-  // }
-  //
-  // Secondary indexes support dot notation for nested fields (e.g., "metadata.region").
-  // Type and version are parsed from the JSON - no separate fields needed.
-  // Fails if this version already exists for the type.
-  string schema_json = 1;
+// RegisterSchemaRequest creates a new resource type.
+message RegisterSchemaRequest {
+  // The schema definition to register.
+  SchemaDefinition schema = 1;
 }
 
-message RegisterSchemaVersionResponse {
-  // The registered schema version with server-assigned metadata.
-  SchemaVersion schema_version = 1;
+message RegisterSchemaResponse {
+  // The registered schema definition.
+  SchemaDefinition schema = 1;
 }
 
-// UpdateSchemaVersionRequest updates an existing version in place.
-message UpdateSchemaVersionRequest {
-  // The updated schema definition as a JSON string.
-  // Type and version must already exist.
-  // Must pass schema evolution compatibility checks.
-  // See RegisterSchemaVersionRequest for JSON format documentation.
-  string schema_json = 1;
-}
-
-message UpdateSchemaVersionResponse {
-  // The updated schema version with server-assigned metadata.
-  SchemaVersion schema_version = 1;
-
-  // Compatibility check results (informational).
-  // Lists what changed from the previous schema.
-  repeated string compatibility_notes = 2;
-}
-
-// SetCurrentSchemaVersionRequest sets the active version for a type.
-message SetCurrentSchemaVersionRequest {
-  // The schema type. Required.
+// AddIndexRequest adds a secondary index to an existing type.
+message AddIndexRequest {
+  // The resource type. Required.
   string type = 1;
 
-  // The version to set as current. Required.
-  // Must be a previously registered version.
-  string version = 2;
+  // The index path to add. Required.
+  // Examples: "spec.nodeName", "metadata.labels.*"
+  // Wildcard ".*" suffix indexes all key-value pairs in a map.
+  string index_path = 2;
 }
 
-message SetCurrentSchemaVersionResponse {
-  // The schema version that is now current.
-  SchemaVersion schema_version = 1;
+message AddIndexResponse {}
 
-  // The previous current version (for audit/logging).
-  string previous_version = 2;
-}
-
-// GetSchemaVersionRequest retrieves a schema version.
-message GetSchemaVersionRequest {
-  // The schema type to retrieve. Required.
+// RemoveIndexRequest removes a secondary index from an existing type.
+message RemoveIndexRequest {
+  // The resource type. Required.
   string type = 1;
 
-  // The version to retrieve. If empty, returns the current version.
-  string version = 2;
-
-  // Optional field mask to retrieve only specific fields.
-  // If not set, all fields are returned.
-  google.protobuf.FieldMask field_mask = 3;
+  // The index path to remove. Required.
+  string index_path = 2;
 }
 
-message GetSchemaVersionResponse {
-  SchemaVersion schema_version = 1;
+message RemoveIndexResponse {}
+
+// GetSchemaRequest retrieves a schema definition.
+message GetSchemaRequest {
+  // The resource type to retrieve. Required.
+  string type = 1;
 }
 
-// ListSchemaTypesRequest lists all schema types.
-message ListSchemaTypesRequest {
-  // Maximum number of types to return. Default is 100, max is 1000.
+message GetSchemaResponse {
+  SchemaDefinition schema = 1;
+}
+
+// ListSchemasRequest lists all schema types.
+message ListSchemasRequest {
+  // Maximum number of schemas to return. Default is 100, max is 1000.
   int32 page_size = 1;
 
   // Token for pagination. Empty for first page.
-  // Use next_page_token from previous response.
   string page_token = 2;
 }
 
-message ListSchemaTypesResponse {
-  // The current version of each schema type.
-  repeated SchemaVersion schema_versions = 1;
+message ListSchemasResponse {
+  // All registered schema definitions.
+  repeated SchemaDefinition schemas = 1;
 
   // Token for next page. Empty if no more results.
   string next_page_token = 2;
@@ -157,148 +104,21 @@ message ListSchemaTypesResponse {
   int32 total_count = 3;
 }
 
-// ListSchemaVersionsRequest lists all versions of a schema type.
-message ListSchemaVersionsRequest {
-  // The schema type. Required.
-  string type = 1;
-
-  // Maximum number of versions to return. Default is 100, max is 1000.
-  int32 page_size = 2;
-
-  // Token for pagination. Empty for first page.
-  string page_token = 3;
-}
-
-message ListSchemaVersionsResponse {
-  // All versions of the schema, ordered by registration time.
-  repeated SchemaVersion schema_versions = 1;
-
-  // The current (active) version.
-  string current_version = 2;
-
-  // Token for next page. Empty if no more results.
-  string next_page_token = 3;
-
-  // Total count of versions (across all pages).
-  int32 total_count = 4;
-}
-
-// SchemaVersion defines a specific version of a schema type.
-// This message is returned by the server; clients submit schema_json.
-message SchemaVersion {
+// SchemaDefinition defines the indexing configuration for a resource type.
+// This is a mutable document — secondary indexes can be added or removed.
+// The primary key is immutable after registration.
+message SchemaDefinition {
   // Unique identifier for this resource type. Immutable after creation.
-  // Examples: "events", "users", "orders"
+  // Examples: "pods", "events", "users"
   string type = 1;
 
-  // Version identifier. Must be unique within a type.
-  // Convention: "v1", "v2", etc.
-  string version = 2;
+  // The JSON path that serves as the primary key. Required. Immutable.
+  // Examples: "metadata.name", "id"
+  string primary_key = 2;
 
-  // The field that serves as the primary key. Required.
-  // Must reference a field defined in `fields`.
-  // Cannot be changed after initial schema registration.
-  string primary_key = 3;
-
-  // Fields to create secondary indexes on.
-  // Supports dot notation for nested fields (e.g., "metadata.region", "address.city").
-  // Each must reference a field or nested path within `fields`.
-  // Can be added in schema updates (new records only indexed).
-  repeated string secondary_indexes = 4;
-
-  // Field definitions for this schema.
-  map<string, FieldDefinition> fields = 5;
-
-  // Server-assigned metadata (read-only).
-  SchemaVersionMetadata metadata = 6;
-}
-
-// FieldDefinition describes a single field in the schema.
-message FieldDefinition {
-  // The data type of this field.
-  FieldType type = 1;
-
-  // Whether this field is required on create.
-  // If true and missing, write is rejected.
-  bool required = 2;
-
-  // Default value for this field (JSON-encoded).
-  // Used when field is missing on read (for backwards compatibility).
-  // Only applicable if required=false.
-  string default_value = 3;
-
-  // Human-readable description of this field.
-  string description = 4;
-}
-
-// FieldType enumerates the supported field types.
-enum FieldType {
-  FIELD_TYPE_UNSPECIFIED = 0;
-
-  // String value (UTF-8).
-  FIELD_TYPE_STRING = 1;
-
-  // 64-bit signed integer.
-  FIELD_TYPE_INT64 = 2;
-
-  // 64-bit floating point.
-  FIELD_TYPE_DOUBLE = 3;
-
-  // Boolean value.
-  FIELD_TYPE_BOOL = 4;
-
-  // Raw bytes.
-  FIELD_TYPE_BYTES = 5;
-
-  // RFC 3339 timestamp string.
-  FIELD_TYPE_TIMESTAMP = 6;
-
-  // JSON object (nested structure).
-  // Nested fields can be indexed using dot notation in secondary_indexes.
-  FIELD_TYPE_OBJECT = 7;
-
-  // JSON array (not indexed).
-  FIELD_TYPE_ARRAY = 8;
-}
-
-// SchemaVersionMetadata contains server-assigned metadata.
-message SchemaVersionMetadata {
-  // When this schema version was registered.
-  // RFC 3339 format.
-  string created_at = 1;
-
-  // Whether this is the current (active) version for its type.
-  bool is_current = 2;
-
-  // Sequence number in the schema WAL.
-  // Used internally for ordering.
-  uint64 wal_seq_num = 3;
-}
-
-// SchemaEvolutionError describes why a schema update was rejected.
-message SchemaEvolutionError {
-  // The type of evolution rule that was violated.
-  EvolutionViolation violation = 1;
-
-  // Human-readable description of the error.
-  string message = 2;
-
-  // The field that caused the violation, if applicable.
-  string field = 3;
-}
-
-// EvolutionViolation enumerates schema evolution rule violations.
-enum EvolutionViolation {
-  EVOLUTION_VIOLATION_UNSPECIFIED = 0;
-
-  // Attempted to change the primary key.
-  EVOLUTION_VIOLATION_PRIMARY_KEY_CHANGED = 1;
-
-  // Attempted to change a field's type.
-  EVOLUTION_VIOLATION_FIELD_TYPE_CHANGED = 2;
-
-  // Added a required field without a default value.
-  EVOLUTION_VIOLATION_REQUIRED_FIELD_NO_DEFAULT = 3;
-
-  // Attempted to rename a field (use add + deprecate instead).
-  EVOLUTION_VIOLATION_FIELD_RENAMED = 4;
+  // JSON paths to create secondary indexes on.
+  // Supports dot notation for nested fields (e.g., "spec.nodeName").
+  // Supports wildcard map indexes (e.g., "metadata.labels.*") to index
+  // all key-value pairs in a JSON map.
+  repeated string secondary_indexes = 3;
 }

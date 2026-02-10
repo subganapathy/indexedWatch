@@ -7,9 +7,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// walEntry wraps the generated SchemaWALEntry with helpers for constructing
-// each operation type and marshaling to/from the opaque bytes the WAL stores.
-
 // marshalRegister creates a REGISTER WAL entry and marshals it to bytes.
 func marshalRegister(s *Schema) ([]byte, error) {
 	entry := &schemav1.SchemaWALEntry{
@@ -19,21 +16,22 @@ func marshalRegister(s *Schema) ([]byte, error) {
 	return proto.Marshal(entry)
 }
 
-// marshalUpdate creates an UPDATE WAL entry and marshals it to bytes.
-func marshalUpdate(s *Schema) ([]byte, error) {
+// marshalAddIndex creates an ADD_INDEX WAL entry and marshals it to bytes.
+func marshalAddIndex(typeName, indexPath string) ([]byte, error) {
 	entry := &schemav1.SchemaWALEntry{
-		Operation: schemav1.SchemaOperation_SCHEMA_OPERATION_UPDATE,
-		Schema:    s.ToProto(),
+		Operation: schemav1.SchemaOperation_SCHEMA_OPERATION_ADD_INDEX,
+		Type:      typeName,
+		IndexPath: indexPath,
 	}
 	return proto.Marshal(entry)
 }
 
-// marshalSetCurrent creates a SET_CURRENT WAL entry and marshals it to bytes.
-func marshalSetCurrent(typeName, version string) ([]byte, error) {
+// marshalRemoveIndex creates a REMOVE_INDEX WAL entry and marshals it to bytes.
+func marshalRemoveIndex(typeName, indexPath string) ([]byte, error) {
 	entry := &schemav1.SchemaWALEntry{
-		Operation: schemav1.SchemaOperation_SCHEMA_OPERATION_SET_CURRENT,
+		Operation: schemav1.SchemaOperation_SCHEMA_OPERATION_REMOVE_INDEX,
 		Type:      typeName,
-		Version:   version,
+		IndexPath: indexPath,
 	}
 	return proto.Marshal(entry)
 }
