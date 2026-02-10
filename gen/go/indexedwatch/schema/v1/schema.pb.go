@@ -21,490 +21,10 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// RegisterSchemaRequest creates a new resource type.
-type RegisterSchemaRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The schema definition to register.
-	Schema        *SchemaDefinition `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RegisterSchemaRequest) Reset() {
-	*x = RegisterSchemaRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RegisterSchemaRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RegisterSchemaRequest) ProtoMessage() {}
-
-func (x *RegisterSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RegisterSchemaRequest.ProtoReflect.Descriptor instead.
-func (*RegisterSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *RegisterSchemaRequest) GetSchema() *SchemaDefinition {
-	if x != nil {
-		return x.Schema
-	}
-	return nil
-}
-
-type RegisterSchemaResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The registered schema definition.
-	Schema        *SchemaDefinition `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RegisterSchemaResponse) Reset() {
-	*x = RegisterSchemaResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RegisterSchemaResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RegisterSchemaResponse) ProtoMessage() {}
-
-func (x *RegisterSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RegisterSchemaResponse.ProtoReflect.Descriptor instead.
-func (*RegisterSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *RegisterSchemaResponse) GetSchema() *SchemaDefinition {
-	if x != nil {
-		return x.Schema
-	}
-	return nil
-}
-
-// AddIndexRequest adds a secondary index to an existing type.
-type AddIndexRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The resource type. Required.
-	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// The index path to add. Required.
-	// Examples: "spec.nodeName", "metadata.labels.*"
-	// Wildcard ".*" suffix indexes all key-value pairs in a map.
-	IndexPath     string `protobuf:"bytes,2,opt,name=index_path,json=indexPath,proto3" json:"index_path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AddIndexRequest) Reset() {
-	*x = AddIndexRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AddIndexRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AddIndexRequest) ProtoMessage() {}
-
-func (x *AddIndexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AddIndexRequest.ProtoReflect.Descriptor instead.
-func (*AddIndexRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *AddIndexRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *AddIndexRequest) GetIndexPath() string {
-	if x != nil {
-		return x.IndexPath
-	}
-	return ""
-}
-
-type AddIndexResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AddIndexResponse) Reset() {
-	*x = AddIndexResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AddIndexResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AddIndexResponse) ProtoMessage() {}
-
-func (x *AddIndexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AddIndexResponse.ProtoReflect.Descriptor instead.
-func (*AddIndexResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{3}
-}
-
-// RemoveIndexRequest removes a secondary index from an existing type.
-type RemoveIndexRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The resource type. Required.
-	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// The index path to remove. Required.
-	IndexPath     string `protobuf:"bytes,2,opt,name=index_path,json=indexPath,proto3" json:"index_path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RemoveIndexRequest) Reset() {
-	*x = RemoveIndexRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RemoveIndexRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RemoveIndexRequest) ProtoMessage() {}
-
-func (x *RemoveIndexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RemoveIndexRequest.ProtoReflect.Descriptor instead.
-func (*RemoveIndexRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *RemoveIndexRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *RemoveIndexRequest) GetIndexPath() string {
-	if x != nil {
-		return x.IndexPath
-	}
-	return ""
-}
-
-type RemoveIndexResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RemoveIndexResponse) Reset() {
-	*x = RemoveIndexResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RemoveIndexResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RemoveIndexResponse) ProtoMessage() {}
-
-func (x *RemoveIndexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RemoveIndexResponse.ProtoReflect.Descriptor instead.
-func (*RemoveIndexResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{5}
-}
-
-// GetSchemaRequest retrieves a schema definition.
-type GetSchemaRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The resource type to retrieve. Required.
-	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetSchemaRequest) Reset() {
-	*x = GetSchemaRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetSchemaRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetSchemaRequest) ProtoMessage() {}
-
-func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetSchemaRequest.ProtoReflect.Descriptor instead.
-func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *GetSchemaRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-type GetSchemaResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Schema        *SchemaDefinition      `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetSchemaResponse) Reset() {
-	*x = GetSchemaResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetSchemaResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetSchemaResponse) ProtoMessage() {}
-
-func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetSchemaResponse.ProtoReflect.Descriptor instead.
-func (*GetSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *GetSchemaResponse) GetSchema() *SchemaDefinition {
-	if x != nil {
-		return x.Schema
-	}
-	return nil
-}
-
-// ListSchemasRequest lists all schema types.
-type ListSchemasRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Maximum number of schemas to return. Default is 100, max is 1000.
-	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	// Token for pagination. Empty for first page.
-	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListSchemasRequest) Reset() {
-	*x = ListSchemasRequest{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListSchemasRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListSchemasRequest) ProtoMessage() {}
-
-func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListSchemasRequest.ProtoReflect.Descriptor instead.
-func (*ListSchemasRequest) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *ListSchemasRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ListSchemasRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-type ListSchemasResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// All registered schema definitions.
-	Schemas []*SchemaDefinition `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
-	// Token for next page. Empty if no more results.
-	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	// Total count of schema types (across all pages).
-	TotalCount    int32 `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListSchemasResponse) Reset() {
-	*x = ListSchemasResponse{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListSchemasResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListSchemasResponse) ProtoMessage() {}
-
-func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListSchemasResponse.ProtoReflect.Descriptor instead.
-func (*ListSchemasResponse) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ListSchemasResponse) GetSchemas() []*SchemaDefinition {
-	if x != nil {
-		return x.Schemas
-	}
-	return nil
-}
-
-func (x *ListSchemasResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *ListSchemasResponse) GetTotalCount() int32 {
-	if x != nil {
-		return x.TotalCount
-	}
-	return 0
-}
-
 // SchemaDefinition defines the indexing configuration for a resource type.
+// The storage engine treats resource data as opaque JSON — schema only
+// controls indexing, not field structure (that's the API layer's job).
+//
 // This is a mutable document — secondary indexes can be added or removed.
 // The primary key is immutable after registration.
 type SchemaDefinition struct {
@@ -526,7 +46,7 @@ type SchemaDefinition struct {
 
 func (x *SchemaDefinition) Reset() {
 	*x = SchemaDefinition{}
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -538,7 +58,7 @@ func (x *SchemaDefinition) String() string {
 func (*SchemaDefinition) ProtoMessage() {}
 
 func (x *SchemaDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[10]
+	mi := &file_indexedwatch_schema_v1_schema_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -551,7 +71,7 @@ func (x *SchemaDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaDefinition.ProtoReflect.Descriptor instead.
 func (*SchemaDefinition) Descriptor() ([]byte, []int) {
-	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{10}
+	return file_indexedwatch_schema_v1_schema_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *SchemaDefinition) GetType() string {
@@ -579,45 +99,12 @@ var File_indexedwatch_schema_v1_schema_proto protoreflect.FileDescriptor
 
 const file_indexedwatch_schema_v1_schema_proto_rawDesc = "" +
 	"\n" +
-	"#indexedwatch/schema/v1/schema.proto\x12\x16indexedwatch.schema.v1\"Y\n" +
-	"\x15RegisterSchemaRequest\x12@\n" +
-	"\x06schema\x18\x01 \x01(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\x06schema\"Z\n" +
-	"\x16RegisterSchemaResponse\x12@\n" +
-	"\x06schema\x18\x01 \x01(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\x06schema\"D\n" +
-	"\x0fAddIndexRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1d\n" +
-	"\n" +
-	"index_path\x18\x02 \x01(\tR\tindexPath\"\x12\n" +
-	"\x10AddIndexResponse\"G\n" +
-	"\x12RemoveIndexRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1d\n" +
-	"\n" +
-	"index_path\x18\x02 \x01(\tR\tindexPath\"\x15\n" +
-	"\x13RemoveIndexResponse\"&\n" +
-	"\x10GetSchemaRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\"U\n" +
-	"\x11GetSchemaResponse\x12@\n" +
-	"\x06schema\x18\x01 \x01(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\x06schema\"P\n" +
-	"\x12ListSchemasRequest\x12\x1b\n" +
-	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"\xa2\x01\n" +
-	"\x13ListSchemasResponse\x12B\n" +
-	"\aschemas\x18\x01 \x03(\v2(.indexedwatch.schema.v1.SchemaDefinitionR\aschemas\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1f\n" +
-	"\vtotal_count\x18\x03 \x01(\x05R\n" +
-	"totalCount\"t\n" +
+	"#indexedwatch/schema/v1/schema.proto\x12\x16indexedwatch.schema.v1\"t\n" +
 	"\x10SchemaDefinition\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1f\n" +
 	"\vprimary_key\x18\x02 \x01(\tR\n" +
 	"primaryKey\x12+\n" +
-	"\x11secondary_indexes\x18\x03 \x03(\tR\x10secondaryIndexes2\x91\x04\n" +
-	"\rSchemaService\x12o\n" +
-	"\x0eRegisterSchema\x12-.indexedwatch.schema.v1.RegisterSchemaRequest\x1a..indexedwatch.schema.v1.RegisterSchemaResponse\x12]\n" +
-	"\bAddIndex\x12'.indexedwatch.schema.v1.AddIndexRequest\x1a(.indexedwatch.schema.v1.AddIndexResponse\x12f\n" +
-	"\vRemoveIndex\x12*.indexedwatch.schema.v1.RemoveIndexRequest\x1a+.indexedwatch.schema.v1.RemoveIndexResponse\x12`\n" +
-	"\tGetSchema\x12(.indexedwatch.schema.v1.GetSchemaRequest\x1a).indexedwatch.schema.v1.GetSchemaResponse\x12f\n" +
-	"\vListSchemas\x12*.indexedwatch.schema.v1.ListSchemasRequest\x1a+.indexedwatch.schema.v1.ListSchemasResponseB\xf0\x01\n" +
+	"\x11secondary_indexes\x18\x03 \x03(\tR\x10secondaryIndexesB\xf0\x01\n" +
 	"\x1acom.indexedwatch.schema.v1B\vSchemaProtoP\x01ZKgithub.com/subganapathy/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1\xa2\x02\x03ISX\xaa\x02\x16Indexedwatch.Schema.V1\xca\x02\x16Indexedwatch\\Schema\\V1\xe2\x02\"Indexedwatch\\Schema\\V1\\GPBMetadata\xea\x02\x18Indexedwatch::Schema::V1b\x06proto3"
 
 var (
@@ -632,40 +119,16 @@ func file_indexedwatch_schema_v1_schema_proto_rawDescGZIP() []byte {
 	return file_indexedwatch_schema_v1_schema_proto_rawDescData
 }
 
-var file_indexedwatch_schema_v1_schema_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_indexedwatch_schema_v1_schema_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_indexedwatch_schema_v1_schema_proto_goTypes = []any{
-	(*RegisterSchemaRequest)(nil),  // 0: indexedwatch.schema.v1.RegisterSchemaRequest
-	(*RegisterSchemaResponse)(nil), // 1: indexedwatch.schema.v1.RegisterSchemaResponse
-	(*AddIndexRequest)(nil),        // 2: indexedwatch.schema.v1.AddIndexRequest
-	(*AddIndexResponse)(nil),       // 3: indexedwatch.schema.v1.AddIndexResponse
-	(*RemoveIndexRequest)(nil),     // 4: indexedwatch.schema.v1.RemoveIndexRequest
-	(*RemoveIndexResponse)(nil),    // 5: indexedwatch.schema.v1.RemoveIndexResponse
-	(*GetSchemaRequest)(nil),       // 6: indexedwatch.schema.v1.GetSchemaRequest
-	(*GetSchemaResponse)(nil),      // 7: indexedwatch.schema.v1.GetSchemaResponse
-	(*ListSchemasRequest)(nil),     // 8: indexedwatch.schema.v1.ListSchemasRequest
-	(*ListSchemasResponse)(nil),    // 9: indexedwatch.schema.v1.ListSchemasResponse
-	(*SchemaDefinition)(nil),       // 10: indexedwatch.schema.v1.SchemaDefinition
+	(*SchemaDefinition)(nil), // 0: indexedwatch.schema.v1.SchemaDefinition
 }
 var file_indexedwatch_schema_v1_schema_proto_depIdxs = []int32{
-	10, // 0: indexedwatch.schema.v1.RegisterSchemaRequest.schema:type_name -> indexedwatch.schema.v1.SchemaDefinition
-	10, // 1: indexedwatch.schema.v1.RegisterSchemaResponse.schema:type_name -> indexedwatch.schema.v1.SchemaDefinition
-	10, // 2: indexedwatch.schema.v1.GetSchemaResponse.schema:type_name -> indexedwatch.schema.v1.SchemaDefinition
-	10, // 3: indexedwatch.schema.v1.ListSchemasResponse.schemas:type_name -> indexedwatch.schema.v1.SchemaDefinition
-	0,  // 4: indexedwatch.schema.v1.SchemaService.RegisterSchema:input_type -> indexedwatch.schema.v1.RegisterSchemaRequest
-	2,  // 5: indexedwatch.schema.v1.SchemaService.AddIndex:input_type -> indexedwatch.schema.v1.AddIndexRequest
-	4,  // 6: indexedwatch.schema.v1.SchemaService.RemoveIndex:input_type -> indexedwatch.schema.v1.RemoveIndexRequest
-	6,  // 7: indexedwatch.schema.v1.SchemaService.GetSchema:input_type -> indexedwatch.schema.v1.GetSchemaRequest
-	8,  // 8: indexedwatch.schema.v1.SchemaService.ListSchemas:input_type -> indexedwatch.schema.v1.ListSchemasRequest
-	1,  // 9: indexedwatch.schema.v1.SchemaService.RegisterSchema:output_type -> indexedwatch.schema.v1.RegisterSchemaResponse
-	3,  // 10: indexedwatch.schema.v1.SchemaService.AddIndex:output_type -> indexedwatch.schema.v1.AddIndexResponse
-	5,  // 11: indexedwatch.schema.v1.SchemaService.RemoveIndex:output_type -> indexedwatch.schema.v1.RemoveIndexResponse
-	7,  // 12: indexedwatch.schema.v1.SchemaService.GetSchema:output_type -> indexedwatch.schema.v1.GetSchemaResponse
-	9,  // 13: indexedwatch.schema.v1.SchemaService.ListSchemas:output_type -> indexedwatch.schema.v1.ListSchemasResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_indexedwatch_schema_v1_schema_proto_init() }
@@ -679,9 +142,9 @@ func file_indexedwatch_schema_v1_schema_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_indexedwatch_schema_v1_schema_proto_rawDesc), len(file_indexedwatch_schema_v1_schema_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   1,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   0,
 		},
 		GoTypes:           file_indexedwatch_schema_v1_schema_proto_goTypes,
 		DependencyIndexes: file_indexedwatch_schema_v1_schema_proto_depIdxs,

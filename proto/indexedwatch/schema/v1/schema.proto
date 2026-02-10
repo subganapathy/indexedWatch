@@ -4,107 +4,10 @@ package indexedwatch.schema.v1;
 
 option go_package = "github.com/subganapathy/indexedwatch/gen/go/indexedwatch/schema/v1;schemav1";
 
-// SchemaService manages schema definitions for resource types.
-// Schemas define what to index: a primary key and secondary indexes.
+// SchemaDefinition defines the indexing configuration for a resource type.
 // The storage engine treats resource data as opaque JSON — schema only
 // controls indexing, not field structure (that's the API layer's job).
 //
-// Workflow:
-// 1. RegisterSchema to create a new type with PK + initial secondary indexes
-// 2. AddIndex / RemoveIndex to evolve the index set
-// 3. GetSchema / ListSchemas for discovery
-//
-// The primary key is immutable after registration. Secondary indexes
-// can be added or removed at any time — adding triggers re-indexing.
-service SchemaService {
-  // RegisterSchema registers a new resource type with its primary key
-  // and initial set of secondary indexes.
-  // Fails if the type already exists.
-  rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
-
-  // AddIndex adds a secondary index to an existing type.
-  // Triggers re-indexing of all existing records for this field.
-  // No-op if the index already exists.
-  rpc AddIndex(AddIndexRequest) returns (AddIndexResponse);
-
-  // RemoveIndex removes a secondary index from an existing type.
-  // The index LSM is not deleted immediately (lazy cleanup).
-  // Fails if the index doesn't exist.
-  rpc RemoveIndex(RemoveIndexRequest) returns (RemoveIndexResponse);
-
-  // GetSchema retrieves the current schema definition for a type.
-  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
-
-  // ListSchemas lists all registered schema types.
-  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
-}
-
-// RegisterSchemaRequest creates a new resource type.
-message RegisterSchemaRequest {
-  // The schema definition to register.
-  SchemaDefinition schema = 1;
-}
-
-message RegisterSchemaResponse {
-  // The registered schema definition.
-  SchemaDefinition schema = 1;
-}
-
-// AddIndexRequest adds a secondary index to an existing type.
-message AddIndexRequest {
-  // The resource type. Required.
-  string type = 1;
-
-  // The index path to add. Required.
-  // Examples: "spec.nodeName", "metadata.labels.*"
-  // Wildcard ".*" suffix indexes all key-value pairs in a map.
-  string index_path = 2;
-}
-
-message AddIndexResponse {}
-
-// RemoveIndexRequest removes a secondary index from an existing type.
-message RemoveIndexRequest {
-  // The resource type. Required.
-  string type = 1;
-
-  // The index path to remove. Required.
-  string index_path = 2;
-}
-
-message RemoveIndexResponse {}
-
-// GetSchemaRequest retrieves a schema definition.
-message GetSchemaRequest {
-  // The resource type to retrieve. Required.
-  string type = 1;
-}
-
-message GetSchemaResponse {
-  SchemaDefinition schema = 1;
-}
-
-// ListSchemasRequest lists all schema types.
-message ListSchemasRequest {
-  // Maximum number of schemas to return. Default is 100, max is 1000.
-  int32 page_size = 1;
-
-  // Token for pagination. Empty for first page.
-  string page_token = 2;
-}
-
-message ListSchemasResponse {
-  // All registered schema definitions.
-  repeated SchemaDefinition schemas = 1;
-
-  // Token for next page. Empty if no more results.
-  string next_page_token = 2;
-
-  // Total count of schema types (across all pages).
-  int32 total_count = 3;
-}
-
-// SchemaDefinition defines the indexing configuration for a resource type.
 // This is a mutable document — secondary indexes can be added or removed.
 // The primary key is immutable after registration.
 message SchemaDefinition {
