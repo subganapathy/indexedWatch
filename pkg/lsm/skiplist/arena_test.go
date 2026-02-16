@@ -248,3 +248,13 @@ func BenchmarkArena_Alloc(b *testing.B) {
 		a.alloc(128, 4, 0)
 	}
 }
+
+func BenchmarkArena_AllocParallel(b *testing.B) {
+	a := newArena(make([]byte, 1<<30)) // 1GB
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			a.alloc(128, 4, 0)
+		}
+	})
+}
