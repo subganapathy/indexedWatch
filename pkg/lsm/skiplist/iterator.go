@@ -1,12 +1,10 @@
 package skiplist
 
-import "github.com/subganapathy/indexedwatch/pkg/lsm/arena"
-
 // Iterator is a forward iterator over the skiplist.
 // Zero value is not valid — use Skiplist.NewIterator.
 type Iterator struct {
 	list  *Skiplist
-	arena *arena.Arena
+	arena *arena
 	nd    uint32 // current node offset (0 = invalid)
 }
 

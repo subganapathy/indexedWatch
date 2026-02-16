@@ -6,18 +6,16 @@ import (
 	"math/rand/v2"
 	"sync"
 	"testing"
-
-	"github.com/subganapathy/indexedwatch/pkg/lsm/arena"
 )
 
 const testArenaSize = 1 << 20 // 1MB
 
-func makeArena() *arena.Arena {
-	return arena.New(make([]byte, testArenaSize))
+func newTestSkiplist(size int) *Skiplist {
+	return New(make([]byte, size))
 }
 
 func TestSkiplist_BasicInsertGet(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 
 	if err := s.Add([]byte("key1"), []byte("val1")); err != nil {
 		t.Fatalf("Add key1: %v", err)
@@ -54,7 +52,7 @@ func TestSkiplist_BasicInsertGet(t *testing.T) {
 }
 
 func TestSkiplist_DuplicateKey(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 
 	if err := s.Add([]byte("dup"), []byte("v1")); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -72,7 +70,7 @@ func TestSkiplist_DuplicateKey(t *testing.T) {
 }
 
 func TestSkiplist_Ordering(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 
 	// Insert in reverse order.
 	keys := []string{"delta", "charlie", "bravo", "alpha"}
@@ -101,7 +99,7 @@ func TestSkiplist_Ordering(t *testing.T) {
 }
 
 func TestSkiplist_EmptyValue(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 
 	if err := s.Add([]byte("k"), nil); err != nil {
 		t.Fatalf("Add with nil value: %v", err)
@@ -116,7 +114,7 @@ func TestSkiplist_EmptyValue(t *testing.T) {
 }
 
 func TestIterator_SeekGE(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 
 	keys := []string{"aa", "bb", "cc", "dd", "ee"}
 	for _, k := range keys {
@@ -156,7 +154,7 @@ func TestIterator_SeekGE(t *testing.T) {
 }
 
 func TestIterator_NextFromSeek(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 
 	for i := 0; i < 10; i++ {
 		k := fmt.Sprintf("key%02d", i)
@@ -180,7 +178,7 @@ func TestIterator_NextFromSeek(t *testing.T) {
 }
 
 func TestSkiplist_ManyKeys(t *testing.T) {
-	s := New(arena.New(make([]byte, 4<<20))) // 4MB
+	s := newTestSkiplist(4 << 20) // 4MB
 
 	const n = 1000
 	for i := 0; i < n; i++ {
@@ -219,8 +217,7 @@ func TestSkiplist_ManyKeys(t *testing.T) {
 }
 
 func TestSkiplist_ConcurrentInsert(t *testing.T) {
-	a := arena.New(make([]byte, 8<<20)) // 8MB
-	s := New(a)
+	s := newTestSkiplist(8 << 20) // 8MB
 
 	const goroutines = 8
 	const keysPerGoroutine = 500
@@ -269,8 +266,7 @@ func TestSkiplist_ConcurrentInsert(t *testing.T) {
 }
 
 func TestSkiplist_ConcurrentReadWrite(t *testing.T) {
-	a := arena.New(make([]byte, 8<<20))
-	s := New(a)
+	s := newTestSkiplist(8 << 20) // 8MB
 
 	// Pre-populate some keys.
 	for i := range 100 {
@@ -315,7 +311,7 @@ func TestSkiplist_ConcurrentReadWrite(t *testing.T) {
 }
 
 func TestSkiplist_Height(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 	if s.Height() != 1 {
 		t.Errorf("initial height = %d, want 1", s.Height())
 	}
@@ -331,7 +327,7 @@ func TestSkiplist_Height(t *testing.T) {
 }
 
 func TestIterator_EmptySkiplist(t *testing.T) {
-	s := New(makeArena())
+	s := newTestSkiplist(testArenaSize)
 	it := s.NewIterator()
 
 	if it.First() {
@@ -345,8 +341,7 @@ func TestIterator_EmptySkiplist(t *testing.T) {
 // --- Benchmarks ---
 
 func BenchmarkSkiplist_Insert(b *testing.B) {
-	a := arena.New(make([]byte, 256<<20)) // 256MB
-	s := New(a)
+	s := New(make([]byte, 256<<20)) // 256MB
 	keys := make([][]byte, b.N)
 	for i := range keys {
 		keys[i] = []byte(fmt.Sprintf("key-%012d", i))
@@ -359,8 +354,7 @@ func BenchmarkSkiplist_Insert(b *testing.B) {
 }
 
 func BenchmarkSkiplist_Get(b *testing.B) {
-	a := arena.New(make([]byte, 64<<20))
-	s := New(a)
+	s := New(make([]byte, 64<<20)) // 64MB
 	const n = 100000
 	keys := make([][]byte, n)
 	for i := range n {
@@ -375,8 +369,7 @@ func BenchmarkSkiplist_Get(b *testing.B) {
 }
 
 func BenchmarkSkiplist_InsertRandom(b *testing.B) {
-	a := arena.New(make([]byte, 256<<20))
-	s := New(a)
+	s := New(make([]byte, 256<<20)) // 256MB
 	keys := make([][]byte, b.N)
 	for i := range keys {
 		keys[i] = []byte(fmt.Sprintf("key-%012d", rand.IntN(b.N*10)))

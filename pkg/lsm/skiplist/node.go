@@ -1,24 +1,14 @@
-// Package skiplist implements a lock-free concurrent skiplist built on an arena
-// allocator. Supports concurrent reads and writes via CAS on arena offsets.
-//
-// Nodes are allocated from the arena: key/value offsets+lengths, height, and a
-// forward pointer array. The skiplist uses lexicographic byte comparison.
-//
-// Pebble reference: internal/arenaskl/skl.go, node.go, iterator.go
 package skiplist
 
 import (
 	"sync/atomic"
 	"unsafe"
-
-	"github.com/subganapathy/indexedwatch/pkg/lsm/arena"
 )
 
 const (
-	// MaxHeight is the maximum tower height for any node.
-	MaxHeight = 20
-
+	maxHeight   = 20
 	maxNodeSize = int(unsafe.Sizeof(node{}))
+	linksSize   = int(unsafe.Sizeof(links{}))
 )
 
 // links holds a single forward pointer (arena offset) at one level.
@@ -28,61 +18,61 @@ type links struct {
 
 // node is the skiplist node stored in the arena.
 // The tower array is truncated to the actual height when allocated —
-// unused levels beyond the node's height are never accessed.
+// unused levels beyond the node's height are never accessed (their memory
+// overlaps with the next allocation via the arena's overflow mechanism).
 type node struct {
-	keyOffset   uint32
-	keySize     uint32
-	valueOffset uint32
-	valueSize   uint32
+	keyOffset uint32
+	keySize   uint32
+	valueSize uint32
 
 	// tower holds forward pointers at each level [0, height).
 	// Accessed atomically for concurrent reads and CAS-based insertion.
-	tower [MaxHeight]links
+	tower [maxHeight]links
 }
 
 // newNode allocates a node in the arena and copies in the key and value.
-func newNode(a *arena.Arena, height uint32, key, value []byte) (uint32, error) {
+// The node struct is truncated to the actual height — unused tower levels
+// are not allocated. The overflow parameter ensures the unsafe.Pointer cast
+// to *node doesn't extend past the arena buffer.
+func newNode(a *arena, height uint32, key, value []byte) (uint32, error) {
 	keySize := uint32(len(key))
 	valueSize := uint32(len(value))
 
-	// Always allocate the full maxNodeSize for the node struct so the
-	// unsafe.Pointer cast to *node is valid for checkptr — even though we
-	// only use tower[0:height], the cast interprets sizeof(node) bytes.
-	nodeSize := uint32(maxNodeSize)
+	unusedSize := uint32((maxHeight - int(height)) * linksSize)
+	nodeSize := uint32(maxNodeSize) - unusedSize
 
-	offset, err := a.Alloc(nodeSize+keySize+valueSize, arena.NodeAlignment)
+	offset, err := a.alloc(nodeSize+keySize+valueSize, nodeAlignment, unusedSize)
 	if err != nil {
 		return 0, err
 	}
 
-	nd := (*node)(a.Pointer(offset))
+	nd := (*node)(a.getPointer(offset))
 	nd.keyOffset = offset + nodeSize
 	nd.keySize = keySize
-	nd.valueOffset = offset + nodeSize + keySize
 	nd.valueSize = valueSize
 
-	a.PutBytes(nd.keyOffset, key)
-	a.PutBytes(nd.valueOffset, value)
+	copy(a.getBytes(nd.keyOffset, keySize), key)
+	copy(a.getBytes(nd.keyOffset+keySize, valueSize), value)
 
 	return offset, nil
 }
 
 // getNode returns a *node from an arena offset.
-func getNode(a *arena.Arena, offset uint32) *node {
+func getNode(a *arena, offset uint32) *node {
 	if offset == 0 {
 		return nil
 	}
-	return (*node)(a.Pointer(offset))
+	return (*node)(a.getPointer(offset))
 }
 
 // getKey returns the key bytes for this node.
-func (n *node) getKey(a *arena.Arena) []byte {
-	return a.GetBytes(n.keyOffset, n.keySize)
+func (n *node) getKey(a *arena) []byte {
+	return a.getBytes(n.keyOffset, n.keySize)
 }
 
 // getValue returns the value bytes for this node.
-func (n *node) getValue(a *arena.Arena) []byte {
-	return a.GetBytes(n.valueOffset, n.valueSize)
+func (n *node) getValue(a *arena) []byte {
+	return a.getBytes(n.keyOffset+n.keySize, n.valueSize)
 }
 
 // getNext returns the next node offset at the given level.

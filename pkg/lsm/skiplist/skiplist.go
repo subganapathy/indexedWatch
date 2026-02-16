@@ -1,20 +1,19 @@
 package skiplist
 
 import (
+	"bytes"
 	"math"
 	"math/rand/v2"
 	"sync/atomic"
-
-	"github.com/subganapathy/indexedwatch/pkg/lsm/arena"
 )
 
-const pValue = 0.25 // 1/4 probability per level
+const pValue = 1 / math.E // Pebble uses 1/e (theoretically optimal)
 
-var probabilities [MaxHeight]uint32
+var probabilities [maxHeight]uint32
 
 func init() {
 	p := float64(1.0)
-	for i := range MaxHeight {
+	for i := range maxHeight {
 		probabilities[i] = uint32(float64(math.MaxUint32) * p)
 		p *= pValue
 	}
@@ -26,16 +25,16 @@ func init() {
 //
 // Keys are compared lexicographically (bytes.Compare semantics).
 type Skiplist struct {
-	arena  *arena.Arena
+	arena  *arena
 	head   uint32       // arena offset of head sentinel node
-	height atomic.Int32 // current max height (1 ≤ height ≤ MaxHeight)
+	height atomic.Int32 // current max height (1 ≤ height ≤ maxHeight)
 }
 
-// New creates a new skiplist on the given arena.
-// The arena must have enough space for the head sentinel node.
-func New(a *arena.Arena) *Skiplist {
+// New creates a new skiplist backed by the given byte buffer.
+func New(buf []byte) *Skiplist {
+	a := newArena(buf)
 	// Allocate head sentinel with max height, no key, no value.
-	headOffset, err := newNode(a, MaxHeight, nil, nil)
+	headOffset, err := newNode(a, maxHeight, nil, nil)
 	if err != nil {
 		panic("arena too small for head node")
 	}
@@ -49,9 +48,9 @@ func New(a *arena.Arena) *Skiplist {
 }
 
 // Add inserts a key-value pair. If the key already exists (exact byte match),
-// returns ErrRecordExists. If the arena is full, returns arena.ErrFull.
+// returns ErrRecordExists. If the arena is full, returns errArenaFull.
 func (s *Skiplist) Add(key, value []byte) error {
-	var spl [MaxHeight]splice
+	var spl [maxHeight]splice
 	if s.findSplice(key, &spl) {
 		return ErrRecordExists
 	}
@@ -118,14 +117,14 @@ func (s *Skiplist) Get(key []byte) ([]byte, bool) {
 	return n.getValue(s.arena), true
 }
 
-// Arena returns the underlying arena.
-func (s *Skiplist) Arena() *arena.Arena {
-	return s.arena
-}
-
 // Height returns the current max height.
 func (s *Skiplist) Height() int {
 	return int(s.height.Load())
+}
+
+// Size returns the number of bytes allocated from the arena.
+func (s *Skiplist) Size() uint32 {
+	return s.arena.size()
 }
 
 // splice records the (prev, next) offsets bracketing a key at one level.
@@ -137,7 +136,7 @@ type splice struct {
 func (s *Skiplist) randomHeight() uint32 {
 	rnd := rand.Uint32()
 	h := uint32(1)
-	for h < MaxHeight && rnd <= probabilities[h] {
+	for h < maxHeight && rnd <= probabilities[h] {
 		h++
 	}
 	return h
@@ -145,7 +144,7 @@ func (s *Skiplist) randomHeight() uint32 {
 
 // findSplice finds the splice at every level for the given key.
 // Returns true if an exact match is found.
-func (s *Skiplist) findSplice(key []byte, spl *[MaxHeight]splice) bool {
+func (s *Skiplist) findSplice(key []byte, spl *[maxHeight]splice) bool {
 	prevOffset := s.head
 	found := false
 
@@ -155,7 +154,7 @@ func (s *Skiplist) findSplice(key []byte, spl *[MaxHeight]splice) bool {
 		for nextOffset != 0 {
 			next := getNode(s.arena, nextOffset)
 			nextKey := next.getKey(s.arena)
-			cmp := compareKeys(key, nextKey)
+			cmp := bytes.Compare(key, nextKey)
 			if cmp <= 0 {
 				if cmp == 0 {
 					found = true
@@ -181,7 +180,7 @@ func (s *Skiplist) findSpliceForLevel(key []byte, level int, start uint32) (prev
 	for next != 0 {
 		nd := getNode(s.arena, next)
 		nextKey := nd.getKey(s.arena)
-		cmp := compareKeys(key, nextKey)
+		cmp := bytes.Compare(key, nextKey)
 		if cmp <= 0 {
 			if cmp == 0 {
 				found = true
@@ -206,7 +205,7 @@ func (s *Skiplist) seekGE(target []byte) (uint32, uint32, bool) {
 		for nextOffset != 0 {
 			nd := getNode(s.arena, nextOffset)
 			nextKey := nd.getKey(s.arena)
-			cmp := compareKeys(target, nextKey)
+			cmp := bytes.Compare(target, nextKey)
 			if cmp <= 0 {
 				break
 			}
@@ -219,29 +218,6 @@ func (s *Skiplist) seekGE(target []byte) (uint32, uint32, bool) {
 		return prevOffset, 0, false
 	}
 	nd := getNode(s.arena, nextOffset)
-	match := compareKeys(target, nd.getKey(s.arena)) == 0
+	match := bytes.Compare(target, nd.getKey(s.arena)) == 0
 	return prevOffset, nextOffset, match
-}
-
-// compareKeys does lexicographic byte comparison.
-func compareKeys(a, b []byte) int {
-	n := len(a)
-	if n > len(b) {
-		n = len(b)
-	}
-	for i := 0; i < n; i++ {
-		if a[i] < b[i] {
-			return -1
-		}
-		if a[i] > b[i] {
-			return 1
-		}
-	}
-	if len(a) < len(b) {
-		return -1
-	}
-	if len(a) > len(b) {
-		return 1
-	}
-	return 0
 }
