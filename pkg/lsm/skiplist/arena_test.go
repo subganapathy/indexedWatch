@@ -17,9 +17,9 @@ func TestArena_Basic(t *testing.T) {
 		t.Fatal("offset 0 is reserved")
 	}
 
-	// Write and read back.
+	// Write and read back via getBytes slice.
 	data := []byte("hello, arena")
-	a.putBytes(off, data)
+	copy(a.getBytes(off, uint32(len(data))), data)
 	got := a.getBytes(off, uint32(len(data)))
 	if string(got) != string(data) {
 		t.Errorf("getBytes = %q, want %q", got, data)

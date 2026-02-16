@@ -87,12 +87,6 @@ func (a *arena) getBytes(offset, size uint32) []byte {
 	return a.buf[offset : offset+size : offset+size]
 }
 
-// putBytes copies src into the arena at offset. The caller must have
-// allocated at least len(src) bytes starting at offset.
-func (a *arena) putBytes(offset uint32, src []byte) {
-	copy(a.buf[offset:offset+uint32(len(src))], src)
-}
-
 // size returns the number of bytes allocated (including the reserved byte 0).
 func (a *arena) size() uint32 {
 	s := a.n.Load()
